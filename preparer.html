@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Preparer - Document Suite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/tesseract.js@v4.0.2/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .loader { border-top-color: #10b981; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .sidebar-link.active { background-color: rgba(255, 255, 255, 0.1); color: white; border-right: 4px solid #10b981; }
+        .drag-over { border-color: #6366f1 !important; background-color: #eff6ff !important; }
+        .page-card { transition: all 0.2s ease; user-select: none; border-width: 2px; }
+        .page-card.selected { border-color: #6366f1; background-color: #eef2ff; }
+        .page-card.selected .selection-indicator { display: flex; }
+        
+        #selection-box { 
+            position: absolute; 
+            background: rgba(99, 102, 241, 0.15); 
+            border: 1px solid rgba(99, 102, 241, 0.5); 
+            pointer-events: none; 
+            z-index: 50; 
+            display: none; 
+        }
+        
+        .split-line { position: absolute; background: #10b981; z-index: 100; transition: background 0.2s; }
+        .split-line:hover { background: #059669; }
+        .split-line.horizontal { height: 4px; width: 100%; cursor: ns-resize; }
+        .split-line.vertical { width: 4px; height: 100%; cursor: ew-resize; }
+        .split-handle { position: absolute; background: #10b981; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .horizontal .split-handle { width: 32px; height: 12px; left: 50%; top: -4px; transform: translateX(-50%); border-radius: 6px; }
+        .vertical .split-handle { width: 12px; height: 32px; top: 50%; left: -4px; transform: translateY(-50%); border-radius: 6px; }
+
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { opacity: 1; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex overflow-hidden text-slate-800">
+
+    <aside class="w-72 bg-[#0f172a] text-slate-400 flex flex-col flex-shrink-0 transition-all duration-300">
+        <div class="p-6">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2 text-white">
+                    <i class="fas fa-folder-open text-blue-500 text-xl"></i>
+                    <h1 class="font-black text-xl tracking-tight">FILE PREPARER</h1>
+                </div>
+                <a href="index.html" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </a>
+            </div>
+            <p class="text-[10px] font-bold text-slate-500 tracking-[0.15em] uppercase">Document Management</p>
+        </div>
+        <nav class="flex-1 px-4 space-y-2 mt-4">
+            <button onclick="switchTab('merge')" id="nav-merge" class="sidebar-link active w-full flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-white/5 transition-all text-left group">
+                <i class="fas fa-layer-group group-hover:text-white transition-colors"></i>
+                <span class="font-medium">Merge</span>
+            </button>
+            <button onclick="switchTab('extract')" id="nav-extract" class="sidebar-link w-full flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-white/5 transition-all text-left group">
+                <i class="fas fa-scissors group-hover:text-white transition-colors"></i>
+                <span class="font-medium">Extract</span>
+            </button>
+            <button onclick="switchTab('split')" id="nav-split" class="sidebar-link w-full flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-white/5 transition-all text-left group">
+                <i class="fas fa-columns group-hover:text-white transition-colors"></i>
+                <span class="font-medium">Split</span>
+            </button>
+        </nav>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        <header class="bg-white h-20 border-b border-slate-200 flex items-center justify-between px-8 flex-shrink-0">
+            <div>
+                <h2 id="page-title" class="text-2xl font-black text-slate-900">Merge Documents</h2>
+                <p id="page-subtitle" class="text-sm text-slate-500">Combine multiple PDF files into one</p>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-8 relative">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[600px] flex flex-col">
+                <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                    <button onclick="triggerFileInput()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-indigo-100 transition-all flex items-center gap-2">
+                        <i class="fas fa-plus"></i> <span id="add-btn-text">Add Files</span>
+                    </button>
+                    <button id="main-action-btn" onclick="executeMainAction()" class="bg-[#10b981] hover:bg-[#059669] text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-emerald-100 transition-all flex items-center gap-2 opacity-50 cursor-not-allowed" disabled>
+                        <i class="fas fa-file-download"></i> <span id="action-btn-text">Merge & Download</span>
+                    </button>
+                </div>
+
+                <div id="content-area" class="flex-1 p-8 relative bg-slate-50/50">
+                    <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
+                        <div class="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-6">
+                            <i class="fas fa-copy text-4xl text-slate-300"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-700 mb-2">No files added yet.</h3>
+                        <p class="text-slate-400">Click the "Add Files" button or drag and drop files here.</p>
+                    </div>
+
+                    <div id="merge-content" class="hidden h-full flex flex-col">
+                        <div id="sort-controls" class="hidden mb-4 flex gap-2 items-center bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                            <i class="fas fa-sort-amount-down text-indigo-600"></i>
+                            <input type="text" id="priority-input" value="info, w2, 1099int, 1099div, 1099" placeholder="Priority: w2, 1099..." class="flex-1 bg-transparent text-sm border-none outline-none text-slate-700 placeholder-slate-400">
+                            <button onclick="autoSortByPriority()" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 px-3 py-1 rounded bg-white shadow-sm">Sort</button>
+                            <button onclick="clearAllFiles()" class="text-xs font-bold text-red-500 hover:text-red-700 px-3 py-1 ml-2">Clear</button>
+                        </div>
+
+                        <div id="merge-list" class="space-y-2 flex-1 overflow-y-auto mb-6"></div>
+
+                        <div id="merge-settings" class="hidden bg-white p-6 rounded-xl border border-slate-200 mt-auto">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Output Filename</label>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="output-filename" placeholder="merged_document" class="flex-1 p-3 rounded-lg border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium">
+                                        <span class="flex items-center text-sm font-bold text-slate-400 bg-slate-100 px-3 rounded-lg border border-slate-200">.pdf</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col justify-center">
+                                    <label class="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-slate-50 w-full transition-colors">
+                                        <input type="checkbox" id="add-toc-option" class="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300" onchange="togglePageNumberOption()">
+                                        <div class="flex flex-col">
+                                            <span class="font-bold text-slate-700 text-sm">Add Table of Contents</span>
+                                            <span class="text-xs text-slate-500">Generate TOC page</span>
+                                        </div>
+                                    </label>
+                                    <div id="page-number-option-container" class="hidden pl-11 -mt-1 pb-2 transition-all">
+                                        <label class="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" id="add-page-numbers-option" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300" checked>
+                                            <span class="text-sm text-slate-600 font-medium">Add Page Numbers to all pages</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="extract-content" class="hidden h-full flex flex-col">
+                        <div id="extract-file-display" class="hidden mb-6 bg-white p-4 rounded-xl border border-slate-200 items-center justify-between shadow-sm">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-file-pdf text-red-500 text-xl"></i>
+                                </div>
+                                <div>
+                                    <h4 id="extract-filename-display" class="font-bold text-slate-700">filename.pdf</h4>
+                                    <div class="flex gap-2 items-center">
+                                        <span id="total-pages-display" class="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded font-bold">0 Pages</span>
+                                        <span id="extract-page-size-info" class="text-[10px] text-slate-400 font-medium italic"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onclick="clearExtractFile()" class="text-slate-400 hover:text-red-500 transition-colors"><i class="fas fa-times"></i></button>
+                        </div>
+
+                        <div id="pdf-extract-ui" class="hidden space-y-6">
+                            <div class="bg-white p-6 rounded-xl border border-slate-200">
+                                <label class="text-xs font-bold text-slate-400 uppercase mb-2 block">Page Range</label>
+                                <input type="text" id="page-range" placeholder="e.g. 1-3, 5, 8-10" class="w-full p-4 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-lg font-mono mb-2">
+                                <p class="text-xs text-slate-400">Enter page numbers or ranges separated by commas.</p>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <label class="relative flex items-center p-4 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-500 transition-all has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50">
+                                    <input type="radio" name="extract-mode" value="merge" class="w-4 h-4 text-indigo-600" checked onchange="toggleExtractNaming(true)">
+                                    <div class="ml-3">
+                                        <p class="text-sm font-bold text-slate-700">Merge Result</p>
+                                        <p class="text-xs text-slate-500">One PDF file</p>
+                                    </div>
+                                </label>
+                                <label class="relative flex items-center p-4 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-500 transition-all has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50">
+                                    <input type="radio" name="extract-mode" value="split" class="w-4 h-4 text-indigo-600" onchange="toggleExtractNaming(false)">
+                                    <div class="ml-3">
+                                        <p class="text-sm font-bold text-slate-700">Split Result</p>
+                                        <p class="text-xs text-slate-500">Separate files</p>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div id="extract-filename-container" class="bg-white p-6 rounded-xl border border-slate-200">
+                                <label class="text-xs font-bold text-slate-400 uppercase mb-2 block">Output Filename</label>
+                                <div class="flex gap-2">
+                                    <input type="text" id="extract-filename" value="extracted" class="w-full p-3 rounded-lg border border-slate-200 outline-none font-medium">
+                                    <span class="flex items-center text-sm font-bold text-slate-400">.pdf</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="image-extract-ui" class="hidden flex-1 flex flex-col">
+                            <div class="bg-white p-8 rounded-xl border border-slate-200 text-center mb-6">
+                                <div class="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i class="fas fa-font text-indigo-600 text-2xl"></i>
+                                </div>
+                                <h3 class="font-bold text-slate-800 mb-2">Optical Character Recognition</h3>
+                                <p class="text-slate-500 text-sm mb-6">Extract text from this image using Tesseract OCR.</p>
+                                <button onclick="processExtractOCR()" class="bg-slate-900 text-white font-bold py-2.5 px-6 rounded-lg hover:bg-slate-800 transition-colors">
+                                    Run OCR
+                                </button>
+                            </div>
+                            <div id="ocr-result-area" class="hidden flex-1 flex flex-col">
+                                <label class="text-xs font-bold text-slate-400 uppercase mb-2 block">Extracted Text</label>
+                                <textarea id="ocr-output" class="flex-1 w-full p-4 bg-slate-900 text-slate-300 rounded-xl font-mono text-sm leading-relaxed outline-none resize-none" readonly></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="split-content" class="hidden h-full flex flex-col">
+                        <div id="split-toolbar" class="hidden mb-6 flex flex-wrap gap-4 items-center justify-between">
+                             <div class="flex items-center gap-3 bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100">
+                                <i class="fas fa-file-pdf text-indigo-600"></i>
+                                <div class="flex flex-col text-left">
+                                    <span id="split-filename-label" class="font-bold text-indigo-900 text-sm truncate max-w-[200px]"></span>
+                                    <span id="split-page-size-info" class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider"></span>
+                                </div>
+                             </div>
+                             <div class="flex items-center gap-2">
+                                <button onclick="selectAllSplitPages()" class="text-xs font-bold bg-white border border-slate-200 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">Select All</button>
+                                <button onclick="clearAllSplitPages()" class="text-xs font-bold bg-white border border-slate-200 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">Clear All</button>
+                                <div class="h-6 w-px bg-slate-200 mx-2"></div>
+                                <button onclick="executeSplitAction()" id="split-action-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm flex items-center gap-2 opacity-50 cursor-not-allowed" disabled>
+                                    <i class="fas fa-magic"></i> Apply Split Tool
+                                </button>
+                                <button onclick="downloadFinalSplitResult()" id="split-download-btn" class="hidden bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm flex items-center gap-2">
+                                    <i class="fas fa-file-download"></i> Download Result
+                                </button>
+                                <button onclick="clearSplitView()" class="p-2 text-slate-400 hover:text-red-500 transition-colors"><i class="fas fa-trash-alt"></i></button>
+                             </div>
+                        </div>
+                        <div id="split-grid-container" class="relative flex-1 overflow-hidden">
+                            <div id="selection-box"></div>
+                            <div id="split-pages-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 overflow-y-auto h-full pr-2 pb-8 content-start"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="preview-modal" class="fixed inset-0 bg-slate-900/90 backdrop-blur-md hidden z-[60] flex items-stretch">
+            <div class="w-80 bg-slate-800 border-r border-slate-700 flex flex-col p-8 text-white overflow-y-auto">
+                <h3 class="text-xl font-bold mb-6 flex items-center gap-2 text-left"><i class="fas fa-cut text-emerald-400"></i> Split Settings</h3>
+                
+                <div class="space-y-8 flex-1">
+                    <div>
+                        <label class="text-xs font-bold text-slate-400 uppercase mb-3 block text-left">Split Direction</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="dir-h" onclick="setSplitDir('H')" class="p-3 bg-emerald-500 rounded-xl font-bold text-sm transition-all flex flex-col items-center gap-1 shadow-inner">
+                                <i class="fas fa-arrows-alt-v"></i> Horizontal
+                            </button>
+                            <button id="dir-v" onclick="setSplitDir('V')" class="p-3 bg-slate-700 rounded-xl font-bold text-sm transition-all flex flex-col items-center gap-1 hover:bg-slate-600">
+                                <i class="fas fa-arrows-alt-h"></i> Vertical
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-400 uppercase mb-3 block text-left">Number of Segments</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" id="split-count-input" min="2" max="10" value="2" onchange="setSplitCount(this.value)" class="w-full p-3 bg-slate-700 text-white rounded-xl font-bold text-center outline-none focus:ring-2 focus:ring-emerald-500 transition-all">
+                        </div>
+                        <p class="text-[10px] text-slate-400 mt-2 italic text-left">Segments will be scaled to fit original page width/height.</p>
+                    </div>
+                </div>
+
+                <div class="pt-8 border-t border-slate-700 mt-6">
+                    <button id="apply-split-btn" onclick="applySplitAndReturn()" class="w-full bg-emerald-500 hover:bg-emerald-600 py-4 rounded-xl font-black text-white shadow-xl flex items-center justify-center gap-3 transition-all transform hover:scale-105 active:scale-95">
+                        <i class="fas fa-check-circle"></i> APPLY SPLIT (OK)
+                    </button>
+                    <button onclick="closePreviewModal()" class="w-full mt-4 text-slate-400 hover:text-white font-bold text-sm">Cancel</button>
+                </div>
+            </div>
+
+            <div class="flex-1 flex flex-col items-center justify-center p-12 relative overflow-hidden">
+                <div id="preview-container" class="relative bg-white shadow-2xl rounded-sm">
+                    <canvas id="large-preview-canvas" class="max-w-full max-h-full"></canvas>
+                    <div id="split-lines-overlay" class="absolute inset-0 pointer-events-auto"></div>
+                </div>
+                <div class="mt-6 text-center">
+                    <span id="preview-page-info" class="text-white font-black text-2xl mb-1 block">PAGE 1</span>
+                    <p class="text-slate-400 text-sm">Drag green lines to define crop areas</p>
+                </div>
+            </div>
+        </div>
+
+        <input type="file" id="merge-input" class="hidden" multiple accept="application/pdf" onchange="handleMergeFiles(this)">
+        <input type="file" id="extract-input" class="hidden" accept="application/pdf" onchange="handleExtractFile(this)">
+        <input type="file" id="split-input" class="hidden" accept="application/pdf" onchange="handleSplitFile(this)">
+    </main>
+
+    <div id="overlay" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm hidden flex-col items-center justify-center z-[100]">
+        <div class="loader ease-linear rounded-full border-4 border-t-4 border-slate-200 h-16 w-16 mb-6"></div>
+        <h2 id="overlay-status" class="text-white font-bold text-xl tracking-tight">Processing...</h2>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        let currentTab = 'merge', mergeFilesList = [], currentExtractFile = null, currentSplitFile = null, currentSplitFileName = '';
+        let selectedSplitPages = new Set(), isSelecting = false, selectionStart = { x: 0, y: 0 };
+        let splitDir = 'H', splitCount = 2, splitLines = [0.5], currentPreviewIndex = 1;
+        let resultPdfBytes = null;
+
+        document.addEventListener('DOMContentLoaded', () => { switchTab('merge'); initDragSelection(); initLineDragging(); });
+
+        function switchTab(tab) {
+            currentTab = tab; document.querySelectorAll('.sidebar-link').forEach(el => el.classList.remove('active'));
+            document.getElementById(`nav-${tab}`).classList.add('active');
+            const titleEl = document.getElementById('page-title'), subtitleEl = document.getElementById('page-subtitle'), addBtnText = document.getElementById('add-btn-text'), actionBtnText = document.getElementById('action-btn-text'), actionBtn = document.getElementById('main-action-btn');
+            document.getElementById('merge-content').classList.add('hidden'); document.getElementById('extract-content').classList.add('hidden'); document.getElementById('split-content').classList.add('hidden');
+            if (tab === 'merge') { titleEl.textContent = 'Merge Documents'; subtitleEl.textContent = 'Combine multiple PDF files into one'; addBtnText.textContent = 'Add Files'; actionBtnText.textContent = 'Merge & Download'; document.getElementById('merge-content').classList.remove('hidden'); updateMergeUI(); }
+            else if (tab === 'extract') { titleEl.textContent = 'Extract'; subtitleEl.textContent = 'Separate pages or extract text'; addBtnText.textContent = 'Select File'; actionBtnText.textContent = 'Run Extraction'; document.getElementById('extract-content').classList.remove('hidden'); updateExtractUI(); }
+            else if (tab === 'split') { titleEl.textContent = 'Split'; subtitleEl.textContent = 'Divide pages into segments'; addBtnText.textContent = 'Import PDF'; actionBtnText.textContent = 'Pending'; document.getElementById('split-content').classList.remove('hidden'); updateSplitUI(); }
+        }
+
+        function triggerFileInput() {
+            if (currentTab === 'merge') document.getElementById('merge-input').click();
+            else if (currentTab === 'extract') document.getElementById('extract-input').click();
+            else if (currentTab === 'split') document.getElementById('split-input').click();
+        }
+
+        function executeMainAction() {
+            if (currentTab === 'merge') { processMerge(); }
+            else if (currentTab === 'extract') {
+                 if (currentExtractFile && currentExtractFile.type === 'application/pdf') { processExtractPDF(); }
+                 else { processExtractOCR(); }
+            }
+        }
+
+        function showOverlay(msg) {
+            const el = document.getElementById('overlay');
+            document.getElementById('overlay-status').innerText = msg;
+            el.classList.remove('hidden'); el.classList.add('flex');
+        }
+
+        function hideOverlay() {
+            const el = document.getElementById('overlay');
+            el.classList.remove('flex'); el.classList.add('hidden');
+        }
+
+        function updateMergeUI() {
+            const listEl = document.getElementById('merge-list'), emptyEl = document.getElementById('empty-state'), actionBtn = document.getElementById('main-action-btn');
+            const sortEl = document.getElementById('sort-controls');
+            const settingsEl = document.getElementById('merge-settings');
+
+            listEl.innerHTML = '';
+            if (mergeFilesList.length === 0) { 
+                emptyEl.classList.remove('hidden'); 
+                actionBtn.disabled = true; 
+                actionBtn.classList.add('opacity-50', 'cursor-not-allowed'); 
+                sortEl.classList.add('hidden');
+                settingsEl.classList.add('hidden');
+            } else {
+                emptyEl.classList.add('hidden'); 
+                actionBtn.disabled = false; 
+                actionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                sortEl.classList.remove('hidden');
+                settingsEl.classList.remove('hidden');
+
+                mergeFilesList.forEach((item, index) => {
+                    const div = document.createElement('div'); 
+                    div.className = "file-item flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md transition-all group";
+                    div.draggable = true;
+                    div.ondragstart = (e) => handleDragStart(e, index);
+                    div.ondragover = handleDragOver;
+                    div.ondrop = (e) => handleDrop(e, index);
+                    div.ondragenter = handleDragEnter;
+                    div.ondragleave = handleDragLeave;
+                    div.ondragend = handleDragEnd;
+
+                    const isPdf = item.file.type === 'application/pdf';
+                    div.innerHTML = `
+                        <div class="flex items-center gap-4 overflow-hidden pointer-events-none">
+                            <span class="w-8 h-8 flex-shrink-0 bg-slate-100 text-slate-500 rounded-lg flex items-center justify-center font-bold text-xs">${index + 1}</span>
+                            <div class="w-10 h-10 flex-shrink-0 ${isPdf ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'} rounded-lg flex items-center justify-center"><i class="fas ${isPdf ? 'fa-file-pdf' : 'fa-image'} text-lg"></i></div>
+                            <div class="min-w-0 text-left">
+                                <p class="text-sm font-bold text-slate-700 truncate">${item.file.name}</p>
+                                <p class="text-xs text-slate-400">${(item.file.size / 1024).toFixed(1)} KB</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onclick="moveFile(${index}, -1)" class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" ${index === 0 ? 'disabled' : ''}><i class="fas fa-arrow-up"></i></button>
+                            <button onclick="moveFile(${index}, 1)" class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" ${index === mergeFilesList.length - 1 ? 'disabled' : ''}><i class="fas fa-arrow-down"></i></button>
+                            <button onclick="removeMergeFile('${item.id}')" class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><i class="fas fa-trash"></i></button>
+                        </div>`;
+                    listEl.appendChild(div);
+                });
+            }
+        }
+        function handleMergeFiles(input) { Array.from(input.files).forEach(file => mergeFilesList.push({ id: Math.random().toString(36).substring(7), file })); input.value = ''; updateMergeUI(); }
+        function removeMergeFile(id) { mergeFilesList = mergeFilesList.filter(f => f.id !== id); updateMergeUI(); }
+
+        // --- Drag & Drop Handlers ---
+        function handleDragStart(e, index) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', index); setTimeout(() => e.target.classList.add('opacity-50'), 0); }
+        function handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
+        function handleDragEnter(e) { e.preventDefault(); const item = e.target.closest('.file-item'); if(item) item.classList.add('drag-over'); }
+        function handleDragLeave(e) { const item = e.target.closest('.file-item'); if (item && !item.contains(e.relatedTarget)) { item.classList.remove('drag-over'); } }
+        function handleDragEnd(e) { e.target.classList.remove('opacity-50'); document.querySelectorAll('.file-item').forEach(el => el.classList.remove('drag-over')); }
+        function handleDrop(e, index) { e.stopPropagation(); e.preventDefault(); const srcIndex = parseInt(e.dataTransfer.getData('text/plain')); if (srcIndex !== index) { const item = mergeFilesList.splice(srcIndex, 1)[0]; mergeFilesList.splice(index, 0, item); updateMergeUI(); } return false; }
+        function moveFile(index, direction) { const newIndex = index + direction; if (newIndex < 0 || newIndex >= mergeFilesList.length) return; const [movedItem] = mergeFilesList.splice(index, 1); mergeFilesList.splice(newIndex, 0, movedItem); updateMergeUI(); }
+        function clearAllFiles() { mergeFilesList = []; updateMergeUI(); }
+
+        function autoSortByPriority() {
+            const priorityStr = document.getElementById('priority-input').value;
+            if (!priorityStr.trim()) return;
+            const priorities = priorityStr.split(',').map(p => p.trim().toLowerCase()).filter(p => p !== "");
+            const normalize = (str) => str.toLowerCase().replace(/-/g, '');
+            mergeFilesList.sort((a, b) => {
+                const nameA = a.file.name.toLowerCase(); const nameB = b.file.name.toLowerCase();
+                const cleanNameA = normalize(nameA); const cleanNameB = normalize(nameB);
+                let scoreA = 1000; let scoreB = 1000;
+                priorities.forEach((p, index) => { const cleanP = normalize(p); if (cleanNameA.includes(cleanP) && index < scoreA) scoreA = index; if (cleanNameB.includes(cleanP) && index < scoreB) scoreB = index; });
+                if (scoreA !== scoreB) return scoreA - scoreB;
+                return nameA.localeCompare(nameB);
+            });
+            updateMergeUI();
+        }
+
+        function togglePageNumberOption() {
+            const tocChecked = document.getElementById('add-toc-option').checked;
+            const container = document.getElementById('page-number-option-container');
+            if (tocChecked) container.classList.remove('hidden'); else container.classList.add('hidden');
+        }
+
+        function ptToIn(pt) { return (pt / 72).toFixed(2); }
+
+        async function handleExtractFile(input) {
+            if (!input.files[0]) return;
+            currentExtractFile = input.files[0]; input.value = '';
+            
+            const isPdf = currentExtractFile.type === 'application/pdf';
+
+            document.getElementById('empty-state').classList.add('hidden');
+            const display = document.getElementById('extract-file-display');
+            display.classList.remove('hidden'); display.classList.add('flex');
+            document.getElementById('extract-filename-display').textContent = currentExtractFile.name;
+            
+            // Set default output filename based on uploaded file
+            const name = currentExtractFile.name;
+            const baseName = name.substring(0, name.lastIndexOf('.')) || name;
+            document.getElementById('extract-filename').value = `extracted_${baseName}`;
+
+            const actionBtn = document.getElementById('main-action-btn'); 
+            actionBtn.disabled = false; actionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+            if (isPdf) {
+                document.getElementById('pdf-extract-ui').classList.remove('hidden');
+                document.getElementById('image-extract-ui').classList.add('hidden');
+                
+                const buffer = await currentExtractFile.arrayBuffer();
+                const p = await PDFLib.PDFDocument.load(buffer);
+                const { width, height } = p.getPage(0).getSize();
+                document.getElementById('total-pages-display').innerText = `${p.getPageCount()} Pages`;
+                document.getElementById('extract-page-size-info').innerText = `Size: ${ptToIn(width)} x ${ptToIn(height)} in`;
+            } else {
+                document.getElementById('pdf-extract-ui').classList.add('hidden');
+                document.getElementById('image-extract-ui').classList.remove('hidden');
+                document.getElementById('total-pages-display').innerText = 'Image File';
+                // For Image, main action is OCR or custom handling
+            }
+        }
+
+        function clearExtractFile() { 
+            currentExtractFile = null; 
+            document.getElementById('empty-state').classList.remove('hidden');
+            document.getElementById('extract-file-display').classList.remove('flex');
+            document.getElementById('extract-file-display').classList.add('hidden');
+            document.getElementById('pdf-extract-ui').classList.add('hidden');
+            document.getElementById('image-extract-ui').classList.add('hidden');
+            document.getElementById('main-action-btn').disabled = true;
+            document.getElementById('main-action-btn').classList.add('opacity-50', 'cursor-not-allowed');
+        }
+
+        function updateExtractUI() {
+             if (!currentExtractFile) {
+                document.getElementById('empty-state').classList.remove('hidden');
+                document.getElementById('extract-file-display').classList.add('hidden');
+                document.getElementById('pdf-extract-ui').classList.add('hidden');
+                document.getElementById('image-extract-ui').classList.add('hidden');
+                document.getElementById('main-action-btn').disabled = true;
+                document.getElementById('main-action-btn').classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        function toggleExtractNaming(isMerge) {
+            const container = document.getElementById('extract-filename-container');
+            if (isMerge) container.classList.remove('opacity-50', 'pointer-events-none');
+            else container.classList.add('opacity-50', 'pointer-events-none');
+        }
+
+        function updateSplitUI() { if (!currentSplitFile) { document.getElementById('empty-state').classList.remove('hidden'); document.getElementById('split-toolbar').classList.add('hidden'); document.getElementById('split-pages-grid').innerHTML = ''; } }
+
+        async function handleSplitFile(input) {
+            if (!input.files[0]) return;
+            currentSplitFileName = input.files[0].name; // Capture filename
+            const buffer = await input.files[0].arrayBuffer();
+            currentSplitFile = buffer;
+            selectedSplitPages.clear(); resultPdfBytes = null; input.value = '';
+            showOverlay('Scanning document...');
+            document.getElementById('empty-state').classList.add('hidden');
+            const toolbar = document.getElementById('split-toolbar'); toolbar.classList.remove('hidden'); toolbar.classList.add('flex');
+            document.getElementById('split-filename-label').textContent = "Current Document";
+            document.getElementById('split-download-btn').classList.add('hidden');
+            
+            const p = await PDFLib.PDFDocument.load(currentSplitFile);
+            const { width, height } = p.getPage(0).getSize();
+            document.getElementById('split-page-size-info').innerText = `Original Size: ${ptToIn(width)} x ${ptToIn(height)} in`;
+            await renderSplitPages(currentSplitFile);
+            hideOverlay();
+        }
+
+        async function renderSplitPages(data) {
+            const grid = document.getElementById('split-pages-grid'); grid.innerHTML = '';
+            // Pass a clone to avoid buffer detaching issues with PDF.js worker
+            const dataClone = data.slice(0);
+            const pdf = await pdfjsLib.getDocument({ data: dataClone }).promise;
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i), viewport = page.getViewport({ scale: 0.3 });
+                const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                canvas.height = viewport.height; canvas.width = viewport.width;
+                await page.render({ canvasContext: ctx, viewport }).promise;
+                const card = document.createElement('div'); 
+                card.className = "page-card bg-white rounded-xl border border-slate-200 overflow-hidden cursor-pointer relative p-1";
+                card.dataset.pageIndex = i; 
+                card.onclick = () => { if (selectedSplitPages.has(i)) selectedSplitPages.delete(i); else selectedSplitPages.add(i); updatePageVisuals(); updateSplitActionState(); };
+                card.innerHTML = `<div class="aspect-[3/4] bg-slate-50 flex items-center justify-center rounded-lg pointer-events-none"><img src="${canvas.toDataURL()}" class="max-w-full max-h-full shadow-sm"></div><div class="p-2 pointer-events-none text-left"><span class="text-[10px] font-black text-slate-400 uppercase">Page ${i}</span></div><div class="selection-indicator absolute top-3 right-3 w-6 h-6 rounded-full bg-indigo-600 text-white items-center justify-center hidden shadow-md"><i class="fas fa-check text-[10px]"></i></div>`;
+                grid.appendChild(card);
+            }
+        }
+
+        function updatePageVisuals() { document.querySelectorAll('.page-card').forEach(card => card.classList.toggle('selected', selectedSplitPages.has(parseInt(card.dataset.pageIndex)))); }
+        function selectAllSplitPages() { document.querySelectorAll('.page-card').forEach(c => selectedSplitPages.add(parseInt(c.dataset.pageIndex))); updatePageVisuals(); updateSplitActionState(); }
+        function clearAllSplitPages() { selectedSplitPages.clear(); updatePageVisuals(); updateSplitActionState(); }
+        function updateSplitActionState() { const btn = document.getElementById('split-action-btn'), has = selectedSplitPages.size > 0; btn.disabled = !has; btn.classList.toggle('opacity-50', !has); btn.classList.toggle('cursor-not-allowed', !has); }
+
+        async function executeSplitAction() {
+            if (selectedSplitPages.size === 0) return;
+            const sorted = Array.from(selectedSplitPages).sort((a,b) => a-b);
+            currentPreviewIndex = sorted[0];
+            showLargePreview(currentPreviewIndex);
+        }
+
+        async function showLargePreview(index) {
+            showOverlay('Rendering editor...');
+            try {
+                // Use a clone for preview to ensure original buffer isn't detached
+                const dataClone = currentSplitFile.slice(0);
+                const pdf = await pdfjsLib.getDocument({ data: dataClone }).promise;
+                const page = await pdf.getPage(index), viewport = page.getViewport({ scale: 1.5 });
+                const canvas = document.getElementById('large-preview-canvas'), ctx = canvas.getContext('2d');
+                canvas.height = viewport.height; canvas.width = viewport.width;
+                await page.render({ canvasContext: ctx, viewport }).promise;
+                document.getElementById('preview-page-info').textContent = `PAGE ${index}`;
+                document.getElementById('preview-modal').classList.remove('hidden');
+                initSplitSettings();
+            } catch (e) { 
+                console.error(e);
+                alert("Failed to load preview: " + e.message); 
+            }
+            hideOverlay();
+        }
+
+        function initSplitSettings() { setSplitDir('H'); setSplitCount(2); }
+        function setSplitDir(dir) {
+            splitDir = dir;
+            document.getElementById('dir-h').className = dir === 'H' ? 'p-3 bg-emerald-500 rounded-xl font-bold text-sm flex flex-col items-center gap-1 shadow-inner' : 'p-3 bg-slate-700 rounded-xl font-bold text-sm flex flex-col items-center gap-1 hover:bg-slate-600';
+            document.getElementById('dir-v').className = dir === 'V' ? 'p-3 bg-emerald-500 rounded-xl font-bold text-sm flex flex-col items-center gap-1 shadow-inner' : 'p-3 bg-slate-700 rounded-xl font-bold text-sm flex flex-col items-center gap-1 hover:bg-slate-600';
+            generateLines();
+        }
+        function setSplitCount(count) { splitCount = Math.max(2, Math.min(10, parseInt(count))); document.getElementById('split-count-input').value = splitCount; generateLines(); }
+        function generateLines() { splitLines = []; for(let i=1; i<splitCount; i++) splitLines.push(i/splitCount); renderSplitLines(); }
+        function renderSplitLines() {
+            const overlay = document.getElementById('split-lines-overlay'); overlay.innerHTML = '';
+            splitLines.forEach((pos, idx) => {
+                const line = document.createElement('div');
+                line.className = `split-line ${splitDir === 'H' ? 'horizontal' : 'vertical'}`;
+                if (splitDir === 'H') line.style.top = `${pos * 100}%`; else line.style.left = `${pos * 100}%`;
+                line.dataset.idx = idx; line.innerHTML = `<div class="split-handle"></div>`;
+                overlay.appendChild(line);
+            });
+        }
+
+        function initLineDragging() {
+            let draggingIdx = -1;
+            const overlay = document.getElementById('split-lines-overlay');
+            overlay.addEventListener('mousedown', (e) => { const line = e.target.closest('.split-line'); if (line) draggingIdx = parseInt(line.dataset.idx); });
+            window.addEventListener('mousemove', (e) => {
+                if (draggingIdx === -1) return;
+                const rect = overlay.getBoundingClientRect();
+                let newPos = (splitDir === 'H') ? (e.clientY - rect.top) / rect.height : (e.clientX - rect.left) / rect.width;
+                splitLines[draggingIdx] = Math.max(0.01, Math.min(0.99, newPos));
+                renderSplitLines();
+            });
+            window.addEventListener('mouseup', () => { draggingIdx = -1; });
+        }
+
+        // Define globally
+        window.applySplitAndReturn = async function() {
+            console.log("Apply Split Triggered");
+            const btn = document.getElementById('apply-split-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            }
+            showOverlay('Processing segments...');
+            await new Promise(r => setTimeout(r, 100)); // Allow UI update
+
+            try {
+                if (typeof PDFLib === 'undefined') {
+                    throw new Error("PDFLib library is not loaded. Please check your internet connection.");
+                }
+
+                const { PDFDocument } = PDFLib;
+                if (!currentSplitFile) {
+                      throw new Error("No file loaded to split.");
+                }
+
+                const srcPdf = await PDFDocument.load(currentSplitFile);
+                const outPdf = await PDFDocument.create();
+                
+                const pageCount = srcPdf.getPageCount();
+                const stops = [0, ...splitLines.slice().sort((a,b) => a-b), 1];
+                
+                // Define margin in points (30 points approx 1cm)
+                const topMargin = 30;
+
+                for (let i = 0; i < pageCount; i++) {
+                    const pageNum = i + 1;
+                    
+                    if (selectedSplitPages.has(pageNum)) {
+                        const originalPage = srcPdf.getPage(i);
+                        const { width, height } = originalPage.getSize();
+                        
+                        for (let j = 0; j < stops.length - 1; j++) {
+                            const start = stops[j];
+                            const end = stops[j+1];
+                            
+                            let cutX, cutY, cutW, cutH;
+
+                            if (splitDir === 'H') {
+                                // Calculate the cut segment box in original PDF coordinates
+                                // Coords: (0,0) is bottom-left
+                                const topY = height * (1 - start);
+                                const bottomY = height * (1 - end);
+                                cutX = 0;
+                                cutY = bottomY;
+                                cutW = width;
+                                cutH = topY - bottomY;
+                            } else {
+                                const leftX = width * start;
+                                const rightX = width * end;
+                                cutX = leftX;
+                                cutY = 0;
+                                cutW = rightX - leftX;
+                                cutH = height;
+                            }
+
+                            // 1. Isolate the segment
+                            const scratchDoc = await PDFDocument.create();
+                            const [scratchPage] = await scratchDoc.copyPages(srcPdf, [i]);
+                            
+                            // CRITICAL FIX: Translate content so the segment starts at (0,0)
+                            // This ensures that when we embed it, the visual area we want is at the origin of the embedded object.
+                            scratchPage.translateContent(-cutX, -cutY);
+                            
+                            // Crop to the shifted segment (now at 0,0)
+                            scratchPage.setCropBox(0, 0, cutW, cutH);
+                            scratchPage.setMediaBox(0, 0, cutW, cutH);
+                            
+                            scratchDoc.addPage(scratchPage);
+
+                            // 2. Embed the cropped page
+                            const embeddedSegment = await outPdf.embedPage(scratchPage);
+
+                            // 3. Create a NEW blank page in the output with the ORIGINAL dimensions
+                            const newPage = outPdf.addPage([width, height]);
+
+                            // 4. Draw the segment
+                            // Align to top-left (plus margin) or center horizontally
+                            const destX = (splitDir === 'V') ? (width - cutW) / 2 : 0;
+                            const destY = height - cutH - topMargin;
+                            
+                            newPage.drawPage(embeddedSegment, {
+                                x: destX,
+                                y: destY, 
+                                width: cutW,
+                                height: cutH,
+                            });
+                        }
+                    } else {
+                        // For non-split pages, we also copy/embed to maintain consistency
+                        const [copiedPage] = await outPdf.copyPages(srcPdf, [i]);
+                        outPdf.addPage(copiedPage);
+                    }
+                }
+                
+                const finalBytes = await outPdf.save();
+                currentSplitFile = finalBytes; 
+                resultPdfBytes = finalBytes; 
+                selectedSplitPages.clear();
+                
+                closePreviewModal();
+                await renderSplitPages(finalBytes);
+                updateSplitActionState();
+                document.getElementById('split-download-btn').classList.remove('hidden');
+                
+            } catch (e) { 
+                console.error(e); 
+                alert("Apply Split Failed: " + e.message); 
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-check-circle"></i> APPLY SPLIT (OK)';
+                }
+                hideOverlay();
+            }
+        };
+
+        function downloadFinalSplitResult() {
+            if (!resultPdfBytes) return;
+            const name = currentSplitFileName || "document.pdf";
+            const baseName = name.substring(0, name.lastIndexOf('.')) || name;
+            download(resultPdfBytes, `split_${baseName}.pdf`, "application/pdf");
+        }
+
+        function closePreviewModal() { document.getElementById('preview-modal').classList.add('hidden'); }
+        
+        // --- FIXED DOWNLOAD FUNCTION ---
+        function download(data, name, type) {
+            const blob = new Blob([data], { type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a); // FIX: Must append to body for some browsers
+            a.click();
+            document.body.removeChild(a); // FIX: Cleanup
+            
+            // FIX: Delay revocation to ensure download starts
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
+        
+        function clearSplitView() { currentSplitFile = null; resultPdfBytes = null; selectedSplitPages.clear(); document.getElementById('split-pages-grid').innerHTML = ''; document.getElementById('split-toolbar').classList.add('hidden'); document.getElementById('empty-state').classList.remove('hidden'); }
+        
+        function initDragSelection() {
+            const gridContainer = document.getElementById('split-grid-container');
+            const selectionBox = document.getElementById('selection-box');
+            const grid = document.getElementById('split-pages-grid');
+
+            gridContainer.addEventListener('mousedown', (e) => {
+                if (currentTab !== 'split' || !currentSplitFile || e.target.closest('.sidebar-link') || e.target.closest('button') || e.target.closest('.page-card')) return;
+                isSelecting = true;
+                const rect = gridContainer.getBoundingClientRect();
+                selectionStart = { x: e.clientX - rect.left, y: e.clientY - rect.top + grid.scrollTop };
+                selectionBox.style.left = `${selectionStart.x}px`;
+                selectionBox.style.top = `${selectionStart.y - grid.scrollTop}px`;
+                selectionBox.style.width = '0px';
+                selectionBox.style.height = '0px';
+                selectionBox.style.display = 'block';
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isSelecting) return;
+                const rect = gridContainer.getBoundingClientRect();
+                const currentX = e.clientX - rect.left;
+                const currentY = e.clientY - rect.top + grid.scrollTop;
+                const left = Math.min(selectionStart.x, currentX);
+                const top = Math.min(selectionStart.y, currentY);
+                const width = Math.abs(selectionStart.x - currentX);
+                const height = Math.abs(selectionStart.y - currentY);
+
+                selectionBox.style.left = `${left}px`;
+                selectionBox.style.top = `${top - grid.scrollTop}px`;
+                selectionBox.style.width = `${width}px`;
+                selectionBox.style.height = `${height}px`;
+
+                document.querySelectorAll('.page-card').forEach(card => {
+                    const cardRect = card.getBoundingClientRect();
+                    const containerRect = gridContainer.getBoundingClientRect();
+                    const cL = cardRect.left - containerRect.left;
+                    const cT = cardRect.top - containerRect.top + grid.scrollTop;
+                    const cR = cL + cardRect.width;
+                    const cB = cT + cardRect.height;
+                    const isIntersecting = !(left > cR || left + width < cL || top > cB || top + height < cT);
+                    if (isIntersecting) selectedSplitPages.add(parseInt(card.dataset.pageIndex));
+                });
+                updatePageVisuals();
+            });
+
+            window.addEventListener('mouseup', () => { if (isSelecting) { isSelecting = false; selectionBox.style.display = 'none'; updateSplitActionState(); } });
+        }
+
+        async function createTOCImage(fileName, fileInfoList, timestamp) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const width = 595 * 2; const height = 842 * 2;
+            canvas.width = width; canvas.height = height;
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#1e293b'; ctx.font = 'bold 64px sans-serif'; ctx.fillText('Table of Contents', 80, 140);
+            ctx.font = '32px sans-serif'; ctx.fillStyle = '#64748b'; ctx.fillText(`File: ${fileName}.pdf`, 80, 200);
+            ctx.fillStyle = '#10b981'; ctx.fillText(`Created: ${timestamp}`, 80, 240);
+            const startY = 320; const rowHeight = 60; const marginX = 80; const tableWidth = width - (marginX * 2);
+            ctx.fillStyle = '#f8fafc'; ctx.fillRect(marginX, startY, tableWidth, rowHeight);
+            ctx.fillStyle = '#475569'; ctx.font = 'bold 28px sans-serif';
+            ctx.fillText('No.', marginX + 30, startY + 40); ctx.fillText('File Name', marginX + 150, startY + 40); ctx.fillText('Page', marginX + tableWidth - 100, startY + 40);
+            ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(marginX, startY + rowHeight); ctx.lineTo(marginX + tableWidth, startY + rowHeight); ctx.stroke();
+            ctx.font = '26px sans-serif'; ctx.fillStyle = '#334155';
+            fileInfoList.forEach((item, i) => {
+                const currentY = startY + rowHeight + (i * rowHeight);
+                ctx.fillText(`${i + 1}`, marginX + 30, currentY + 40);
+                let name = item.name.length > 40 ? item.name.substring(0, 37) + '...' : item.name;
+                ctx.fillText(name, marginX + 150, currentY + 40);
+                ctx.fillStyle = '#6366f1'; ctx.font = 'bold 26px sans-serif';
+                ctx.fillText(`${item.startPage}`, marginX + tableWidth - 100, currentY + 40);
+                ctx.font = '26px sans-serif'; ctx.fillStyle = '#334155';
+                ctx.strokeStyle = '#f1f5f9'; ctx.beginPath(); ctx.moveTo(marginX, currentY + rowHeight); ctx.lineTo(marginX + tableWidth, currentY + rowHeight); ctx.stroke();
+            });
+            return canvas.toDataURL('image/png');
+        }
+
+        async function processMerge() {
+            if (mergeFilesList.length < 2) return;
+            showOverlay('Merging PDFs...');
+            try {
+                const { PDFDocument, PageSizes, rgb, StandardFonts } = PDFLib;
+                const mergedPdf = await PDFDocument.create();
+                const A4 = PageSizes.A4;
+                const now = new Date();
+                const timestamp = now.toISOString().slice(0, 19).replace('T', ' ');
+                const outputName = document.getElementById('output-filename').value.trim() || "merged_document";
+                const useToc = document.getElementById('add-toc-option').checked;
+                const usePageNumbers = document.getElementById('add-page-numbers-option').checked;
+
+                const fileInfoForToc = [];
+                let currentPageOffset = useToc ? 1 : 0;
+
+                for (const item of mergeFilesList) {
+                    let pageCount = 0;
+                    if (item.file.type === 'application/pdf') {
+                        const b = await item.file.arrayBuffer();
+                        const p = await PDFDocument.load(b);
+                        pageCount = p.getPageCount();
+                    } else { pageCount = 1; }
+                    fileInfoForToc.push({ name: item.file.name, type: item.file.type, startPage: currentPageOffset + 1 });
+                    currentPageOffset += pageCount;
+                }
+
+                if (useToc) {
+                    const tocImg = await mergedPdf.embedPng(await createTOCImage(outputName, fileInfoForToc, timestamp));
+                    const p = mergedPdf.addPage(A4);
+                    p.drawImage(tocImg, { x: 0, y: 0, width: A4[0], height: A4[1] });
+                }
+
+                for (const item of mergeFilesList) {
+                    const buffer = await item.file.arrayBuffer();
+                    if (item.file.type === 'application/pdf') {
+                        const pdf = await PDFDocument.load(buffer);
+                        const pages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                        pages.forEach(p => mergedPdf.addPage(p));
+                    } else {
+                        const isPng = item.file.type === 'image/png';
+                        const img = isPng ? await mergedPdf.embedPng(buffer) : await mergedPdf.embedJpg(buffer);
+                        const p = mergedPdf.addPage(A4);
+                        const dims = img.scaleToFit(A4[0] - 40, A4[1] - 40);
+                        p.drawImage(img, { x: (A4[0] - dims.width)/2, y: (A4[1] - dims.height)/2, width: dims.width, height: dims.height });
+                    }
+                }
+
+                if(useToc) {
+                    const font = await mergedPdf.embedFont(StandardFonts.Helvetica);
+                    const pages = mergedPdf.getPages();
+                    if (usePageNumbers) {
+                        pages.forEach((page, idx) => {
+                            if(idx === 0) return; 
+                            page.drawText(`Page ${idx + 1}`, { x: page.getWidth() - 80, y: 30, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+                        });
+                    }
+                    const tocPage = pages[0];
+                    const tocStartY = 320; const rowH = 60; const scale = 0.5;
+                    fileInfoForToc.forEach((info, i) => {
+                         const targetPageIdx = info.startPage - 1;
+                         if(targetPageIdx < pages.length) {
+                             const rowHeightPoints = rowH * scale; 
+                             const rowTopFromTopEdge = (tocStartY + rowH + (i * rowH)) * scale;
+                             const rowTopY = A4[1] - rowTopFromTopEdge;
+                             const rowBottomY = rowTopY - rowHeightPoints;
+
+                             const link = mergedPdf.context.register(mergedPdf.context.obj({ 
+                                 Type: 'Annot', Subtype: 'Link', 
+                                 Rect: [40, rowBottomY, 550, rowTopY], 
+                                 Border: [0, 0, 0], 
+                                 Dest: [pages[targetPageIdx].ref, 'XYZ', null, null, null] 
+                             }));
+                             tocPage.node.addAnnot(link);
+                         }
+                    });
+                }
+
+                const pdfBytes = await mergedPdf.save();
+                download(pdfBytes, `${outputName}.pdf`, "application/pdf");
+            } catch (e) { console.error(e); alert("Merge Error: " + e.message); }
+            hideOverlay();
+        }
+
+        async function processExtractPDF() {
+            const rangeStr = document.getElementById('page-range').value; if (!rangeStr.trim()) return alert("Enter page range");
+            
+            const mode = document.querySelector('input[name="extract-mode"]:checked').value;
+            showOverlay('Extracting...');
+            
+            try {
+                const { PDFDocument } = PDFLib;
+                const srcPdf = await PDFDocument.load(await currentExtractFile.arrayBuffer()), total = srcPdf.getPageCount();
+                const groups = parsePageGroups(rangeStr, total);
+                
+                const baseName = currentExtractFile.name.substring(0, currentExtractFile.name.lastIndexOf('.')) || currentExtractFile.name;
+
+                if (mode === 'merge') {
+                    const newPdf = await PDFDocument.create();
+                    const indices = groups.flat();
+                    const pages = await newPdf.copyPages(srcPdf, indices);
+                    pages.forEach(p => newPdf.addPage(p));
+                    
+                    const outputName = document.getElementById('extract-filename').value || `extracted_${baseName}`;
+                    download(await newPdf.save(), `${outputName}.pdf`, 'application/pdf');
+                } else {
+                    for(let i=0; i<groups.length; i++) {
+                        const newPdf = await PDFDocument.create();
+                        const group = groups[i];
+                        const pages = await newPdf.copyPages(srcPdf, group);
+                        pages.forEach(p => newPdf.addPage(p));
+                        
+                        const start = group[0] + 1;
+                        const end = group[group.length - 1] + 1;
+                        let suffix = "";
+                        if (group.length === 1) {
+                            suffix = `_${start}`;
+                        } else {
+                            suffix = `_${start}_to_${end}`;
+                        }
+                        
+                         download(await newPdf.save(), `${baseName}${suffix}.pdf`, 'application/pdf');
+                    }
+                }
+            } catch (e) { alert("Extract Error: " + e.message); }
+            hideOverlay();
+        }
+
+        async function processExtractOCR() {
+            showOverlay('Running OCR...');
+            try {
+                const worker = await Tesseract.createWorker();
+                await worker.loadLanguage('kor+eng');
+                await worker.initialize('kor+eng');
+                const { data: { text } } = await worker.recognize(currentExtractFile);
+                document.getElementById('ocr-output').value = text;
+                document.getElementById('ocr-result-area').classList.remove('hidden');
+                await worker.terminate();
+            } catch (e) { alert("OCR Error: " + e.message); }
+            hideOverlay();
+        }
+
+        function parsePageGroups(str, total) {
+            const groups = [];
+            str.split(',').forEach(part => {
+                const p = part.trim();
+                if(!p) return;
+                const range = [];
+                if(p.includes('-')) {
+                    const [s, e] = p.split('-').map(Number);
+                    for(let i=s; i<=e; i++) if(i>=1 && i<=total) range.push(i-1);
+                } else {
+                    const n = parseInt(p);
+                    if(n>=1 && n<=total) range.push(n-1);
+                }
+                if(range.length) groups.push(range);
+            });
+            return groups;
+        }
+    </script>
+</body>
+</html>
