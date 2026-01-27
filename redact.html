@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redact OCR - Smart Privacy Masking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .loader {
+            border-top-color: #3498db;
+            animation: spinner 1.5s linear infinite;
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .page-wrapper {
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            background-color: white !important;
+            position: relative;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            cursor: crosshair;
+            background-color: white !important;
+        }
+        .sort-label.active {
+            color: #2563eb;
+            font-weight: 800;
+            border-bottom: 2px solid #2563eb;
+        }
+        #customAlert {
+            display: none;
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+            padding: 1rem 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        /* Custom scrollbar for sidebar */
+        aside::-webkit-scrollbar { width: 4px; }
+        aside::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+        
+        .highlight-box {
+            position: absolute;
+            z-index: 10;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-[#edf2f7] min-h-screen text-slate-800 overflow-hidden flex">
+
+    <!-- Credit Badge -->
+    <div class="fixed top-4 right-8 text-[10px] font-bold text-gray-400 z-[100] tracking-widest uppercase opacity-50 hover:opacity-100 transition-opacity">
+        by ark of ease
+    </div>
+
+    <!-- Alert Toast -->
+    <div id="customAlert" class="bg-white border-l-4 border-blue-500 text-gray-800 font-medium">
+        <span id="customAlertText"></span>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="w-[340px] bg-white border-r border-gray-200 flex flex-col shrink-0 h-screen z-20 shadow-xl">
+        <!-- Sidebar Header -->
+        <div class="h-auto py-6 bg-[#0f172a] flex flex-col justify-center px-6 shrink-0">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-3">
+                    <svg class="w-6 h-6 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"></path></svg>
+                    <h1 class="text-white font-black text-xl tracking-tight">REDACT OCR</h1>
+                </div>
+                
+                <a href="vip_Ehera_PDF.html" class="flex items-center gap-2 px-3 py-1.5 bg-[#1e293b] hover:bg-[#334155] border border-[#334155] hover:border-[#475569] rounded-lg transition-all group shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-blue-400 group-hover:text-white transition-colors" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                    </svg>
+                    <span class="text-[11px] font-bold text-slate-300 group-hover:text-white transition-colors">Home</span>
+                </a>
+            </div>
+            <p class="text-[10px] text-slate-400 font-medium leading-relaxed pl-1">
+                Automatically detect sensitive information and apply secure redactions.
+            </p>
+        </div>
+
+        <!-- Sidebar Content -->
+        <div class="flex-1 overflow-y-auto p-6 space-y-6">
+            
+            <!-- File Select -->
+            <div>
+                <label class="block group cursor-pointer w-full">
+                    <div class="bg-white border-2 border-blue-100 border-dashed rounded-xl h-24 flex flex-col items-center justify-center hover:bg-blue-50/50 hover:border-blue-300 transition-all group-active:scale-95">
+                        <svg class="w-8 h-8 text-blue-500 mb-2" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path></svg>
+                        <span class="text-xs font-bold text-blue-600">Change File</span>
+                    </div>
+                    <input type="file" id="fileInput" class="hidden" accept="image/*,application/pdf">
+                </label>
+                <div id="fileInfo" class="mt-2 text-center hidden">
+                    <p id="fileNameDisplay" class="text-[11px] font-semibold text-gray-500 truncate px-2"></p>
+                    <p id="pageCountDisplay" class="text-[10px] text-blue-600 font-black uppercase mt-0.5"></p>
+                </div>
+            </div>
+
+            <!-- Keywords -->
+            <div>
+                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Masking Keywords</label>
+                <textarea id="keywords" rows="3" placeholder="Confidential, 123-45..." 
+                    class="w-full bg-gray-50 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs text-gray-700 leading-relaxed resize-none"></textarea>
+            </div>
+
+            <!-- SSN Config -->
+            <div class="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <label class="flex items-center cursor-pointer mb-3">
+                    <input type="checkbox" id="ssnToggle" checked class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <span class="ml-2 text-xs font-bold text-gray-800">Auto-detect SSN</span>
+                </label>
+                
+                <div id="ssnTypeContainer" class="ml-6 space-y-2 border-l-2 border-gray-200 pl-3">
+                    <label class="flex items-center cursor-pointer group">
+                        <div class="w-4 h-4 rounded-full border border-gray-300 bg-white flex items-center justify-center mr-2 group-hover:border-blue-400">
+                            <input type="radio" name="ssnType" value="full" checked class="opacity-0 absolute z-[-1] peer">
+                            <div class="w-2 h-2 rounded-full bg-blue-600 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                        </div>
+                        <span class="text-[11px] text-gray-600 font-medium">Full Mask (XXX-XX-XXXX)</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer group">
+                        <div class="w-4 h-4 rounded-full border border-gray-300 bg-white flex items-center justify-center mr-2 group-hover:border-blue-400">
+                            <input type="radio" name="ssnType" value="partial" class="opacity-0 absolute z-[-1] peer">
+                            <div class="w-2 h-2 rounded-full bg-blue-600 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                        </div>
+                        <span class="text-[11px] text-gray-600 font-medium">Partial (XXX-XX-****)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Main Actions -->
+            <div class="space-y-3 pt-2">
+                <button id="startProcessBtn" disabled class="w-full bg-[#0088cc] hover:bg-[#0077b3] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    <span>Scan Document</span>
+                </button>
+
+                <!-- Cosmetic Manual Tool Button -->
+                <button class="w-full bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-bold py-2.5 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 text-xs">
+                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    Manual Redact Tool
+                </button>
+
+                <button id="undoBtn" class="w-full bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-bold py-2.5 px-4 rounded-xl shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2 text-xs">
+                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>
+                    Undo Last Mask
+                </button>
+            </div>
+
+            <!-- Warning Disclaimer -->
+            <div class="p-3 bg-red-50 border border-red-200 rounded-xl shadow-sm">
+                <p class="text-[10px] text-red-600 font-bold leading-relaxed text-center">
+                    ⚠️ WARNING: Automated detection may not find 100% of sensitive info. Please verify manually.
+                </p>
+            </div>
+
+            <!-- Extra Tools (Hidden) -->
+            <div id="textToolbox" class="hidden pt-2">
+                <button id="copyAllTextBtn" class="w-full bg-gray-50 hover:bg-gray-100 text-gray-600 py-2 rounded-lg text-[10px] font-bold border border-gray-200 transition flex items-center justify-center gap-2">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                    Copy Raw Text
+                </button>
+            </div>
+
+        </div>
+
+        <!-- Sidebar Footer -->
+        <div class="p-6 border-t border-gray-100 bg-white">
+            <div id="actionArea" class="hidden w-full">
+                <button id="downloadBtn" class="w-full bg-[#00aa66] hover:bg-[#00995c] text-white font-bold py-3.5 px-4 rounded-lg shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 text-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Export Safe PDF
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 h-screen overflow-y-auto bg-[#edf2f7] relative p-8 md:p-12">
+        
+        <!-- Status Indicator -->
+        <div id="statusArea" class="hidden mb-6 p-4 rounded-xl bg-white text-blue-700 flex items-center shadow-sm border border-blue-100 max-w-2xl mx-auto">
+            <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-6 w-6 mr-4"></div>
+            <span id="statusText" class="font-bold text-sm">Processing...</span>
+        </div>
+
+        <!-- Manual Masking Hint Banner -->
+        <div id="manualHint" class="hidden mb-8 max-w-3xl mx-auto bg-amber-50 rounded-xl border border-amber-100 p-4 shadow-sm animate-in fade-in slide-in-from-top-4">
+            <div class="flex items-start gap-3">
+                <div class="bg-amber-100 p-2 rounded-lg text-amber-600 shrink-0">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z"></path><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd"></path></svg>
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-amber-800 uppercase mb-1">Manual Redact Active</h4>
+                    <p class="text-xs text-amber-700 leading-relaxed font-medium">
+                        The manual redact tool is always active. Simply <strong>click and drag</strong> over any part of the document to mask it immediately.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Review / Results Area -->
+        <div id="reviewArea" class="hidden max-w-3xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden mb-8 transition-all duration-500">
+            <div class="p-5 border-b bg-gray-50 flex items-center justify-between">
+                <h3 class="font-black text-gray-800 text-lg">Found Keywords</h3>
+                <div class="flex items-center space-x-4">
+                    <button id="selectAllBtn" class="text-[10px] text-blue-600 hover:underline font-black uppercase tracking-wider">Select All</button>
+                    <button id="clearAllBtn" class="text-[10px] text-red-600 hover:underline font-black uppercase tracking-wider">Clear All</button>
+                </div>
+            </div>
+
+            <div class="flex bg-white border-b text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                <button id="sortPageBtn" class="w-20 py-3 text-center sort-label active transition-all hover:bg-gray-50">Page</button>
+                <button id="sortContentBtn" class="flex-1 py-3 text-left px-6 sort-label transition-all border-l border-r hover:bg-gray-50">Matched Text</button>
+                <div class="w-16 py-3 text-center">Mask</div>
+            </div>
+            
+            <div id="foundItemsList" class="max-h-64 overflow-y-auto p-4 bg-gray-50 space-y-2 custom-scrollbar"></div>
+            
+            <div class="p-5 border-t bg-white flex gap-4">
+                <button id="applyRedactionBtn" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-black py-3 rounded-xl shadow-lg transition-all active:scale-95 text-sm">Apply Selected Masks</button>
+                <button id="cancelProcessBtn" class="px-6 bg-white border border-gray-200 hover:bg-gray-50 text-gray-500 font-bold rounded-xl transition text-xs uppercase shadow-sm">Discard</button>
+            </div>
+        </div>
+
+        <!-- Document Preview Area -->
+        <div id="previewContainer" class="max-w-4xl mx-auto min-h-[800px] flex flex-col items-center justify-start">
+            
+            <!-- Empty State -->
+            <div id="placeholder" class="text-gray-400 text-center my-auto">
+                <div class="bg-white p-10 rounded-full shadow-lg mb-6 mx-auto w-40 h-40 flex items-center justify-center animate-pulse">
+                    <svg class="w-16 h-16 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                </div>
+                <h4 class="text-xl font-bold text-slate-500 mb-2">Waiting for Document...</h4>
+                <p class="text-sm text-slate-400">Only you can see your data. No files leave your browser.</p>
+            </div>
+            
+            <!-- Canvases -->
+            <div id="pagesContainer" class="w-full hidden space-y-8 pb-20"></div>
+        </div>
+
+    </main>
+
+    <canvas id="processCanvas" class="hidden"></canvas>
+
+    <!-- JS Logic -->
+    <script>
+        const { jsPDF } = window.jspdf;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        const fileInput = document.getElementById('fileInput');
+        const startProcessBtn = document.getElementById('startProcessBtn');
+        const pagesContainer = document.getElementById('pagesContainer');
+        const placeholder = document.getElementById('placeholder');
+        const statusArea = document.getElementById('statusArea');
+        const statusText = document.getElementById('statusText');
+        const reviewArea = document.getElementById('reviewArea');
+        const actionArea = document.getElementById('actionArea');
+        const foundItemsList = document.getElementById('foundItemsList');
+        const processCanvas = document.getElementById('processCanvas');
+        const pCtx = processCanvas.getContext('2d');
+        const textToolbox = document.getElementById('textToolbox');
+        const manualHint = document.getElementById('manualHint');
+        const ssnToggle = document.getElementById('ssnToggle');
+        const undoBtn = document.getElementById('undoBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let pages = []; 
+        let currentDetectedBatch = []; 
+        let currentSort = 'page';
+        let processScale = 1.5; 
+        let processPadding = 30;
+
+        function showMsg(msg, isError = false) {
+            const el = document.getElementById('customAlert');
+            const textEl = document.getElementById('customAlertText');
+            textEl.innerText = msg;
+            el.className = isError ? "bg-red-50 border-l-4 border-red-500 text-red-800 p-4 fixed top-5 left-1/2 -translate-x-1/2 z-[2000] shadow-2xl rounded-lg flex items-center" : "bg-white border-l-4 border-blue-500 text-gray-800 p-4 fixed top-5 left-1/2 -translate-x-1/2 z-[2000] shadow-2xl rounded-lg flex items-center";
+            el.style.display = 'block';
+            setTimeout(() => { el.style.display = 'none'; }, 3000);
+        }
+
+        fileInput.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            resetUI();
+            document.getElementById('fileNameDisplay').innerText = file.name;
+            document.getElementById('fileInfo').classList.remove('hidden');
+            showStatus("Opening document...");
+            try {
+                if (file.type === 'application/pdf') await handlePDF(file);
+                else if (file.type.startsWith('image/')) await handleImage(file);
+            } catch (err) { showMsg("Failed to load file.", true); hideStatus(); }
+        };
+
+        function resetUI() {
+            pagesContainer.innerHTML = '';
+            foundItemsList.innerHTML = '';
+            pages = [];
+            currentDetectedBatch = [];
+            clearHighlights();
+            reviewArea.classList.add('hidden');
+            actionArea.classList.add('hidden');
+            textToolbox.classList.add('hidden');
+            manualHint.classList.add('hidden');
+            placeholder.classList.remove('hidden');
+            pagesContainer.classList.add('hidden');
+            startProcessBtn.disabled = true;
+        }
+
+        function showStatus(text) { statusArea.classList.remove('hidden'); statusText.innerText = text; }
+        function hideStatus() { statusArea.classList.add('hidden'); }
+
+        async function handlePDF(file) {
+            const buffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+            document.getElementById('pageCountDisplay').innerText = `${pdf.numPages} Page(s)`;
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 1.5 });
+                const pageObj = createPage(viewport.width, viewport.height, i - 1);
+                
+                await page.render({ canvasContext: pageObj.ctx, viewport: viewport }).promise;
+                savePageState(pageObj);
+                pages.push(pageObj);
+            }
+            onReady();
+        }
+
+        async function handleImage(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const pageObj = createPage(img.width, img.height, 0);
+                    pageObj.ctx.drawImage(img, 0, 0);
+                    savePageState(pageObj);
+                    pages.push(pageObj);
+                    document.getElementById('pageCountDisplay').innerText = "1 Image";
+                    onReady();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function onReady() {
+            hideStatus();
+            placeholder.classList.add('hidden');
+            pagesContainer.classList.remove('hidden');
+            manualHint.classList.remove('hidden');
+            startProcessBtn.disabled = false;
+            actionArea.classList.remove('hidden');
+        }
+
+        function createPage(w, h, idx) {
+            const wrapper = document.createElement('div');
+            // Changed: Added w-fit to ensure wrapper shrinks to canvas size, keeping header aligned width-wise
+            wrapper.className = 'page-wrapper mx-auto rounded-xl overflow-hidden w-fit bg-white'; 
+            wrapper.innerHTML = `<div class="bg-[#0f172a] text-white text-[10px] px-3 py-1 font-bold uppercase tracking-widest">Page ${idx+1}</div>`;
+            
+            // NEW: Container for canvas and overlays
+            const canvasContainer = document.createElement('div');
+            canvasContainer.className = 'relative'; 
+
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            
+            const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, w, h);
+            
+            canvasContainer.appendChild(canvas);
+            wrapper.appendChild(canvasContainer);
+            pagesContainer.appendChild(wrapper);
+            
+            const pageObj = { 
+                idx, 
+                canvas, 
+                wrapper, // Stores the outer card
+                canvasContainer, // Stores the positioning context
+                ctx: ctx, 
+                ocrData: null, 
+                redactedHistory: [],
+                undoStack: [] 
+            };
+            setupManualMasking(pageObj);
+            return pageObj;
+        }
+
+        function savePageState(page) {
+            if (page.undoStack.length >= 5) {
+                page.undoStack.shift(); 
+            }
+            const imageData = page.ctx.getImageData(0, 0, page.canvas.width, page.canvas.height);
+            page.undoStack.push({
+                imageData: imageData,
+                historyCount: page.redactedHistory.length
+            });
+        }
+
+        function setupManualMasking(page) {
+            let isDrawing = false;
+            let startX, startY;
+            let tempImgData = null;
+
+            const getPos = (e) => {
+                const rect = page.canvas.getBoundingClientRect();
+                const scaleX = page.canvas.width / rect.width;
+                const scaleY = page.canvas.height / rect.height;
+                const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+                const clientY = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * scaleX,
+                    y: (clientY - rect.top) * scaleY
+                };
+            };
+
+            const startDraw = (e) => {
+                isDrawing = true;
+                const pos = getPos(e);
+                startX = pos.x;
+                startY = pos.y;
+                tempImgData = page.ctx.getImageData(0, 0, page.canvas.width, page.canvas.height);
+                actionArea.classList.remove('hidden');
+            };
+
+            const moveDraw = (e) => {
+                if (!isDrawing) return;
+                const pos = getPos(e);
+                page.ctx.putImageData(tempImgData, 0, 0);
+                page.ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
+                page.ctx.setLineDash([5, 5]);
+                page.ctx.strokeRect(startX, startY, pos.x - startX, pos.y - startY);
+                page.ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+                page.ctx.fillRect(startX, startY, pos.x - startX, pos.y - startY);
+            };
+
+            const endDraw = (e) => {
+                if (!isDrawing) return;
+                isDrawing = false;
+                const pos = getPos(e);
+                const width = pos.x - startX;
+                const height = pos.y - startY;
+
+                if (Math.abs(width) < 2 || Math.abs(height) < 2) {
+                    page.ctx.putImageData(tempImgData, 0, 0);
+                    return;
+                }
+
+                page.ctx.putImageData(tempImgData, 0, 0);
+                savePageState(page);
+
+                page.ctx.fillStyle = "black";
+                page.ctx.fillRect(startX, startY, width, height);
+                
+                const x0 = Math.min(startX, pos.x);
+                const x1 = Math.max(startX, pos.x);
+                const y0 = Math.min(startY, pos.y);
+                const y1 = Math.max(startY, pos.y);
+                
+                page.redactedHistory.push({
+                    text: "[Manual Mask]",
+                    pageIdx: page.idx,
+                    bbox: { x0, y0, x1, y1 }
+                });
+            };
+
+            page.canvas.addEventListener('mousedown', startDraw);
+            window.addEventListener('mousemove', moveDraw);
+            window.addEventListener('mouseup', endDraw);
+            page.canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDraw(e); }, { passive: false });
+            page.canvas.addEventListener('touchmove', (e) => { e.preventDefault(); moveDraw(e); }, { passive: false });
+            page.canvas.addEventListener('touchend', (e) => { e.preventDefault(); endDraw(e); }, { passive: false });
+        }
+
+        function getSafeOCRBuffer(canvas) {
+            processCanvas.width = (canvas.width * processScale) + (processPadding * 2);
+            processCanvas.height = (canvas.height * processScale) + (processPadding * 2);
+            pCtx.fillStyle = "#FFFFFF";
+            pCtx.fillRect(0, 0, processCanvas.width, processCanvas.height);
+            pCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, processPadding, processPadding, canvas.width * processScale, canvas.height * processScale);
+            return processCanvas.toDataURL('image/jpeg', 0.7);
+        }
+
+        function extractContext(lineWords, matchedIndices, buffer = 3) {
+            const first = Math.min(...matchedIndices);
+            const last = Math.max(...matchedIndices);
+            const start = Math.max(0, first - buffer);
+            const end = Math.min(lineWords.length, last + buffer + 1);
+            
+            return lineWords.slice(start, end).map((w, idx) => {
+                const currentIdx = start + idx;
+                const isMatched = matchedIndices.includes(currentIdx);
+                return isMatched ? `[${w.text}]` : w.text;
+            }).join(' ');
+        }
+
+        startProcessBtn.onclick = async () => {
+            const keys = document.getElementById('keywords').value.split(',').map(s => s.trim()).filter(s => s !== "");
+            const isSsnEnabled = ssnToggle.checked;
+            const ssnMaskType = document.querySelector('input[name="ssnType"]:checked').value;
+
+            if (keys.length === 0 && !isSsnEnabled) { 
+                showMsg("Enter keywords or enable SSN detection.", true); 
+                return; 
+            }
+
+            startProcessBtn.disabled = true;
+            showStatus("Initializing Engine...");
+            
+            try {
+                const worker = await Tesseract.createWorker(['kor', 'eng']);
+                currentDetectedBatch = [];
+
+                const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
+
+                for (let i = 0; i < pages.length; i++) {
+                    showStatus(`Scanning Page ${i+1}/${pages.length}...`);
+                    const page = pages[i];
+                    const imgData = getSafeOCRBuffer(page.canvas);
+                    const { data } = await worker.recognize(imgData);
+                    page.ocrData = data;
+
+                    const adj = (b) => ({
+                        x0: (b.x0 - processPadding) / processScale,
+                        y0: (b.y0 - processPadding) / processScale,
+                        x1: (b.x1 - processPadding) / processScale,
+                        y1: (b.y1 - processPadding) / processScale
+                    });
+
+                    data.lines.forEach(line => {
+                        const lineText = line.text;
+                        const lowerLineText = lineText.toLowerCase();
+                        let ssnMatchRects = [];
+
+                        if (isSsnEnabled) {
+                            const ssnMatches = [...lineText.matchAll(ssnRegex)];
+                            ssnMatches.forEach(match => {
+                                const foundText = match[0];
+                                const matchStartIdx = match.index;
+                                
+                                let matchWords = [];
+                                let matchIndices = [];
+                                let currentPos = 0;
+
+                                line.words.forEach((word, wIdx) => {
+                                    const wordStart = lineText.indexOf(word.text, currentPos);
+                                    if (wordStart !== -1) {
+                                        const wordEnd = wordStart + word.text.length;
+                                        if (wordStart < matchStartIdx + foundText.length && wordEnd > matchStartIdx) {
+                                            matchWords.push(word);
+                                            matchIndices.push(wIdx);
+                                        }
+                                        currentPos = wordEnd;
+                                    }
+                                });
+
+                                if (matchWords.length > 0) {
+                                    const context = extractContext(line.words, matchIndices);
+                                    const item = processMatch(matchWords, "[SSN] " + (ssnMaskType === 'partial' ? "XXX-XX-****" : foundText), i, adj, context, ssnMaskType);
+                                    if (item) ssnMatchRects.push(item.bbox);
+                                }
+                            });
+                        }
+
+                        if (keys.length > 0) {
+                            keys.forEach(k => {
+                                const lowerK = k.toLowerCase();
+                                
+                                if (lowerK.includes(' ') && lowerLineText.includes(lowerK)) {
+                                    let matchedWords = [];
+                                    let matchedIndices = [];
+                                    for (let wIdx = 0; wIdx < line.words.length; wIdx++) {
+                                        const wordText = line.words[wIdx].text.toLowerCase();
+                                        if (lowerK.includes(wordText)) {
+                                            matchedWords.push(line.words[wIdx]);
+                                            matchedIndices.push(wIdx);
+                                            const combined = matchedWords.map(mw => mw.text.toLowerCase()).join(' ');
+                                            if (combined.includes(lowerK)) {
+                                                const context = extractContext(line.words, matchedIndices);
+                                                processMatch(matchedWords, k, i, adj, context, 'full');
+                                                matchedWords = []; matchedIndices = [];
+                                            }
+                                        } else {
+                                            matchedWords = []; matchedIndices = [];
+                                        }
+                                    }
+                                } 
+                                
+                                line.words.forEach((word, wIdx) => {
+                                    if (word.text.toLowerCase().includes(lowerK)) {
+                                        const fullB = adj(word.bbox);
+                                        const isAlreadyMaskedAsSsn = ssnMatchRects.some(r => 
+                                            Math.abs(r.x0 - fullB.x0) < 5 && Math.abs(r.y0 - fullB.y0) < 5
+                                        );
+                                        if (isAlreadyMaskedAsSsn) return;
+
+                                        const wordStr = word.text.toLowerCase();
+                                        const startIdx = wordStr.indexOf(lowerK);
+                                        const unitW = (fullB.x1 - fullB.x0) / word.text.length;
+                                        const context = extractContext(line.words, [wIdx]);
+                                        
+                                        currentDetectedBatch.push({
+                                            text: k, original: word.text, context: context,
+                                            pageIdx: i, selected: true,
+                                            id: `word-${Math.random().toString(36).substr(2,9)}`,
+                                            bbox: {
+                                                x0: fullB.x0 + (unitW * startIdx),
+                                                y0: fullB.y0,
+                                                x1: fullB.x0 + (unitW * (startIdx + lowerK.length)),
+                                                y1: fullB.y1
+                                            }
+                                        });
+                                    }
+                                });
+                            });
+                        }
+                    });
+                }
+                await worker.terminate();
+                hideStatus();
+
+                if (currentDetectedBatch.length > 0) {
+                    currentDetectedBatch = currentDetectedBatch.filter((v, i, a) => 
+                        a.findIndex(t => t.pageIdx === v.pageIdx && 
+                        Math.abs(t.bbox.x0 - v.bbox.x0) < 3 && 
+                        Math.abs(t.bbox.y0 - v.bbox.y0) < 3) === i);
+                    textToolbox.classList.remove('hidden');
+                    renderReview();
+                    renderHighlights();
+                } else {
+                    showMsg("No matches found.");
+                    startProcessBtn.disabled = false;
+                }
+            } catch (err) {
+                console.error(err);
+                showMsg("OCR engine error.", true);
+                hideStatus();
+                startProcessBtn.disabled = false;
+            }
+        };
+
+        function processMatch(wordList, originalKey, pageIdx, adjFn, context, maskType = 'full') {
+            if (wordList.length === 0) return null;
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            wordList.forEach(w => {
+                const b = adjFn(w.bbox);
+                minX = Math.min(minX, b.x0);
+                minY = Math.min(minY, b.y0);
+                maxX = Math.max(maxX, b.x1);
+                maxY = Math.max(maxY, b.y1);
+            });
+
+            if (maskType === 'partial') {
+                const totalWidth = maxX - minX;
+                maxX = minX + (totalWidth * (6.3 / 11)); 
+            }
+
+            const item = {
+                text: originalKey, 
+                original: wordList.map(w => w.text).join(" "), 
+                context: context,
+                pageIdx: pageIdx, 
+                selected: true,
+                id: `phrase-${Math.random().toString(36).substr(2,9)}`,
+                bbox: { x0: minX, y0: minY, x1: maxX, y1: maxY }
+            };
+            currentDetectedBatch.push(item);
+            return item;
+        }
+
+        function clearHighlights() {
+            document.querySelectorAll('.highlight-box').forEach(el => el.remove());
+        }
+
+        function renderHighlights() {
+            clearHighlights();
+            currentDetectedBatch.forEach(item => {
+                const page = pages[item.pageIdx];
+                if(!page) return;
+
+                const div = document.createElement('div');
+                const w = page.canvas.width;
+                const h = page.canvas.height;
+                const b = item.bbox;
+                
+                div.style.position = 'absolute';
+                div.style.left = `${(b.x0 / w) * 100}%`;
+                div.style.top = `${(b.y0 / h) * 100}%`;
+                div.style.width = `${((b.x1 - b.x0) / w) * 100}%`;
+                div.style.height = `${((b.y1 - b.y0) / h) * 100}%`;
+                div.className = 'highlight-box transition-all';
+                div.id = `highlight-${item.id}`;
+                
+                updateHighlightStyle(div, item.selected);
+
+                div.onclick = (e) => {
+                    e.stopPropagation();
+                    item.selected = !item.selected;
+                    updateHighlightStyle(div, item.selected);
+                    
+                    // Sync with list checkbox
+                    const checkbox = document.getElementById(`checkbox-${item.id}`);
+                    if(checkbox) checkbox.checked = item.selected;
+                };
+                
+                page.canvasContainer.appendChild(div);
+            });
+        }
+
+        function updateHighlightStyle(div, isSelected) {
+            if(isSelected) {
+                div.style.backgroundColor = 'rgba(252, 211, 77, 0.4)'; // Amber-300 with opacity
+                div.style.border = '2px solid #f59e0b'; // Amber-500
+            } else {
+                div.style.backgroundColor = 'transparent';
+                div.style.border = '1px dashed #9ca3af'; // Gray-400
+            }
+        }
+
+        function renderReview() {
+            reviewArea.classList.remove('hidden');
+            foundItemsList.innerHTML = '';
+            currentDetectedBatch.sort((a, b) => {
+                if (currentSort === 'page') return a.pageIdx - b.pageIdx;
+                return a.text.localeCompare(b.text);
+            });
+            currentDetectedBatch.forEach(item => {
+                const div = document.createElement('div');
+                div.className = "flex items-center bg-white border border-gray-100 rounded-xl p-3 shadow-sm hover:border-blue-300 transition-all cursor-pointer";
+                div.innerHTML = `
+                    <div class="w-16 text-[10px] font-black text-gray-300 border-r mr-4 text-center">P.${item.pageIdx+1}</div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs font-bold text-gray-800 truncate">${item.text}</p>
+                        <p class="text-[9px] text-gray-400 italic truncate italic">... ${item.context} ...</p>
+                    </div>
+                    <div class="w-12 flex justify-center">
+                        <input type="checkbox" id="checkbox-${item.id}" ${item.selected ? 'checked' : ''} class="w-5 h-5 text-blue-600 rounded-lg cursor-pointer border-gray-200 focus:ring-blue-500 transition-all">
+                    </div>`;
+                
+                const checkbox = div.querySelector('input');
+                checkbox.onchange = (e) => {
+                    item.selected = e.target.checked;
+                    // Sync with canvas highlight
+                    const highlight = document.getElementById(`highlight-${item.id}`);
+                    if(highlight) updateHighlightStyle(highlight, item.selected);
+                };
+                
+                foundItemsList.appendChild(div);
+            });
+            reviewArea.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        document.getElementById('sortPageBtn').onclick = () => { currentSort = 'page'; setActiveSort('sortPageBtn'); renderReview(); };
+        document.getElementById('sortContentBtn').onclick = () => { currentSort = 'content'; setActiveSort('sortContentBtn'); renderReview(); };
+        document.getElementById('selectAllBtn').onclick = () => { 
+            currentDetectedBatch.forEach(i => i.selected = true); 
+            renderReview(); 
+            renderHighlights(); 
+        };
+        document.getElementById('clearAllBtn').onclick = () => { 
+            currentDetectedBatch.forEach(i => i.selected = false); 
+            renderReview(); 
+            renderHighlights(); 
+        };
+
+        function setActiveSort(id) {
+            document.querySelectorAll('.sort-label').forEach(el => el.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        document.getElementById('applyRedactionBtn').onclick = () => {
+            const selected = currentDetectedBatch.filter(i => i.selected);
+            if (selected.length === 0) return;
+
+            pages.forEach(p => savePageState(p));
+
+            selected.forEach(item => {
+                const page = pages[item.pageIdx];
+                page.ctx.save();
+                page.ctx.fillStyle = "black";
+                page.ctx.fillRect(item.bbox.x0 - 0.5, item.bbox.y0 - 0.5, (item.bbox.x1 - item.bbox.x0) + 1, (item.bbox.y1 - item.bbox.y0) + 1);
+                page.ctx.restore();
+                page.redactedHistory.push(item);
+            });
+            currentDetectedBatch = [];
+            clearHighlights();
+            reviewArea.classList.add('hidden');
+            actionArea.classList.remove('hidden');
+            startProcessBtn.disabled = false;
+            showMsg("Redaction applied successfully.");
+        };
+
+        undoBtn.onclick = () => {
+            let undidSomething = false;
+            pages.forEach(page => {
+                if (page.undoStack.length > 0) {
+                    const lastState = page.undoStack.pop();
+                    page.ctx.putImageData(lastState.imageData, 0, 0);
+                    page.redactedHistory = page.redactedHistory.slice(0, lastState.historyCount);
+                    undidSomething = true;
+                }
+            });
+
+            if (undidSomething) {
+                showMsg("Action undone.");
+            } else {
+                showMsg("Nothing to undo.");
+            }
+        };
+
+        document.getElementById('copyAllTextBtn').onclick = () => {
+            const fullText = pages.map(p => `[Page ${p.idx+1}]\n${p.ocrData ? p.ocrData.text : ''}`).join('\n\n');
+            const textarea = document.createElement('textarea');
+            textarea.value = fullText;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showMsg("Full text copied to clipboard!");
+        };
+
+        // Simplified Export Logic - Direct Image PDF
+        downloadBtn.onclick = () => {
+            if (pages.length === 0) return;
+            generatePDF();
+        };
+
+        function generatePDF() {
+            showStatus("Generating PDF...");
+            setTimeout(() => {
+                try {
+                    const pdf = new jsPDF({
+                        orientation: pages[0].canvas.width > pages[0].canvas.height ? 'l' : 'p',
+                        unit: 'px', 
+                        format: [pages[0].canvas.width, pages[0].canvas.height], 
+                        hotfix: ['px_scaling']
+                    });
+
+                    pages.forEach((page, idx) => {
+                        if (idx > 0) pdf.addPage([page.canvas.width, page.canvas.height], page.canvas.width > page.canvas.height ? 'l' : 'p');
+
+                        // Flattened Image with burnt-in masks
+                        pdf.addImage(page.canvas.toDataURL('image/jpeg', 0.8), 'JPEG', 0, 0, page.canvas.width, page.canvas.height);
+
+                        // Invisible Text for Searchability (Data Hygiene: remove redacted words)
+                        if (page.ocrData) {
+                            page.ocrData.words.forEach(w => {
+                                const b = {
+                                    x0: (w.bbox.x0 - processPadding) / processScale,
+                                    y0: (w.bbox.y0 - processPadding) / processScale,
+                                    x1: (w.bbox.x1 - processPadding) / processScale,
+                                    y1: (w.bbox.y1 - processPadding) / processScale
+                                };
+                                
+                                const isRedacted = page.redactedHistory.some(rh => {
+                                    return !(b.x1 < rh.bbox.x0 || 
+                                            b.x0 > rh.bbox.x1 || 
+                                            b.y1 < rh.bbox.y0 || 
+                                            b.y0 > rh.bbox.y1);
+                                });
+                                
+                                if (!isRedacted) {
+                                    const fontSize = (b.y1 - b.y0) * 0.8; 
+                                    pdf.setFontSize(fontSize);
+                                    pdf.setFont("helvetica", "normal");
+                                    pdf.text(w.text, b.x0, b.y1, { baseline: 'bottom', renderingMode: 'invisible' });
+                                }
+                            });
+                        }
+                    });
+                    
+                    let fileName = document.getElementById('fileNameDisplay').innerText || 'document';
+                    // Ensure output is always .pdf
+                    const lastDotIndex = fileName.lastIndexOf('.');
+                    if (lastDotIndex !== -1) {
+                        const ext = fileName.substring(lastDotIndex).toLowerCase();
+                        if (ext !== '.pdf') {
+                            fileName = fileName.substring(0, lastDotIndex) + '.pdf';
+                        }
+                    } else {
+                        fileName += '.pdf';
+                    }
+
+                    pdf.save(`redacted_${fileName}`);
+                    hideStatus();
+                    showMsg("PDF Exported Successfully!");
+                } catch (e) {
+                    console.error(e);
+                    showMsg("Failed to generate PDF.", true);
+                    hideStatus();
+                }
+            }, 100);
+        }
+
+        document.getElementById('cancelProcessBtn').onclick = () => {
+            currentDetectedBatch = []; 
+            clearHighlights();
+            reviewArea.classList.add('hidden'); 
+            startProcessBtn.disabled = false;
+        };
+    </script>
+</body>
+</html>
