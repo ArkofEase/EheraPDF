@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ehera PDF - Auto Filler</title>
+    
+    <!-- LIBRARIES (안정적인 버전 고정) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cpa: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 800: '#075985', 900: '#0c4a6e' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; overflow: hidden; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        
+        .canvas-wrapper { position: relative; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); margin-bottom: 2rem; background: white; }
+        .overlay-layer { position: absolute; inset: 0; pointer-events: none; }
+        
+        /* Interactive Object Styles */
+        /* Changed: align-items to flex-end to anchor text at the bottom, removed padding */
+        .interactive-item { 
+            position: absolute; cursor: grab; pointer-events: auto; user-select: none; z-index: 10; 
+            padding: 0; display: flex; align-items: flex-end; justify-content: center; 
+        }
+        .interactive-item:active { cursor: grabbing; }
+        
+        /* DRAFT (Manual Stamps) - YELLOW, SOLID */
+        .item-draft { 
+            /* border: 2px solid #fbbf24; Replaced with box-shadow to prevent size shift */
+            box-shadow: 0 0 0 2px #fbbf24;
+            background-color: rgba(251, 191, 36, 0.2);
+            z-index: 30; 
+        }
+
+        /* AUTO-FILL BASE */
+        .item-auto { transition: all 0.2s ease; z-index: 20; }
+        
+        /* AUTO - INACTIVE (Blurry) */
+        .item-auto-inactive {
+            /* border: 1px dashed #94a3b8; Replaced with box-shadow */
+            box-shadow: 0 0 0 1px #94a3b8;
+            background-color: rgba(148, 163, 184, 0.1);
+            opacity: 0.5;
+            filter: blur(1.5px);
+        }
+        .item-auto-inactive:hover {
+            filter: none;
+            opacity: 1;
+            /* border-color: #3b82f6; */
+            box-shadow: 0 0 0 2px #3b82f6;
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        /* AUTO - ACTIVE FIELDS (Solid Blue) */
+        .item-auto-active-field {
+            /* border: 2px solid #3b82f6; */
+            box-shadow: 0 0 0 2px #3b82f6;
+            background-color: rgba(59, 130, 246, 0.15);
+            opacity: 1;
+            filter: none;
+            z-index: 25;
+        }
+
+        /* AUTO - ACTIVE MARKERS (Solid Purple/Red) */
+        .item-auto-active-marker {
+            /* border: 2px solid #9333ea; */
+            box-shadow: 0 0 0 2px #9333ea;
+            background-color: rgba(147, 51, 234, 0.15);
+            opacity: 1;
+            filter: none;
+            z-index: 25;
+        }
+        
+        /* Specific Type Styles */
+        .item-eraser { 
+            background-color: white; 
+            /* border: 1px solid #e2e8f0; */
+            box-shadow: inset 0 0 0 1px #e2e8f0; /* Eraser uses inset to not expand */
+            opacity: 0.8; 
+        }
+        
+        .interactive-item.selected { 
+            outline: 3px solid #3b82f6 !important; 
+            outline-offset: 4px; 
+            z-index: 50; 
+            filter: none !important; 
+            opacity: 1 !important; 
+        }
+        .interactive-item.selected:not(.item-eraser) { background-color: rgba(59, 130, 246, 0.15); }
+        
+        /* Resize Handle */
+        .resize-handle { 
+            position: absolute; width: 16px; height: 16px; background: #3b82f6; 
+            border-radius: 50%; right: -8px; top: -8px; cursor: nwse-resize; 
+            display: none; z-index: 60; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .interactive-item.selected .resize-handle { display: block; }
+
+        /* Delete Button */
+        .delete-btn {
+            position: absolute; top: -12px; left: -12px; width: 24px; height: 24px;
+            background-color: #ef4444; color: white; border-radius: 50%;
+            font-size: 14px; display: none; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 70; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: 2px solid white;
+        }
+        
+        /* Edit Button */
+        .edit-btn {
+            position: absolute; top: -12px; right: 18px; width: 24px; height: 24px;
+            background-color: #3b82f6; color: white; border-radius: 50%;
+            font-size: 10px; display: none; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 70; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: 2px solid white;
+        }
+
+        .interactive-item:hover .delete-btn, .interactive-item.selected .delete-btn { display: flex; }
+        .interactive-item:hover .edit-btn, .interactive-item.selected .edit-btn { display: flex; }
+        
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #0ea5e9; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .animate-in { animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+        .coord-tag { font-size: 9px; padding: 2px 6px; background: #eff6ff; border: 1px solid #dbeafe; border-radius: 99px; color: #1e40af; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+        .coord-tag:hover { background: #dbeafe; }
+        .coord-tag button { color: #93c5fd; hover:text-red-500; }
+        .coord-tag button:hover { color: #ef4444; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen w-screen flex">
+
+    <!-- SIDEBAR -->
+    <nav class="w-80 bg-white border-r flex flex-col shrink-0 z-20 shadow-xl h-full">
+        <div class="p-5 border-b bg-slate-900 text-white">
+            <div class="flex items-center justify-between">
+                <h1 class="text-lg font-black tracking-wide uppercase flex items-center gap-2">
+                    <i class="fas fa-magic text-cpa-500"></i> Auto-Filler
+                </h1>
+                <a href="vip_Ehera_PDF.html" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs px-2 py-1 rounded text-slate-300 hover:text-white transition-colors" title="Go Home">
+                    <i class="fas fa-home"></i> Home
+                </a>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1 font-bold tracking-widest uppercase">Smart Form Completion</p>
+        </div>
+
+        <div class="p-4 border-b bg-slate-50 space-y-3">
+            <label class="block w-full bg-white hover:bg-blue-50 text-blue-700 border-2 border-blue-100 hover:border-blue-300 text-center py-3 rounded-xl font-bold cursor-pointer transition-all shadow-sm">
+                <i class="fas fa-folder-open mr-2"></i> <span id="filename-display">Open PDF</span>
+                <input type="file" id="file-input" class="hidden" accept="application/pdf" />
+            </label>
+            <button id="btn-undo" class="w-full py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-lg text-xs flex items-center justify-center gap-2 disabled:opacity-50" disabled>
+                <i class="fas fa-undo"></i> Undo
+            </button>
+        </div>
+
+        <!-- TOOLS SECTION -->
+        <div class="p-3 bg-slate-50 border-b space-y-3">
+            <div class="grid grid-cols-4 gap-2">
+                <button id="btn-tool-text" class="flex items-center justify-center gap-2 py-2 px-1 rounded-lg border bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors" onclick="UI.setTool('tool_text')" title="Text">
+                    <i class="fas fa-font text-purple-600"></i>
+                </button>
+                <button id="btn-tool-check" class="flex items-center justify-center gap-2 py-2 px-1 rounded-lg border bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors" onclick="UI.setTool('tool_check')" title="Check Mark">
+                    <i class="fas fa-check text-green-600"></i>
+                </button>
+                <button id="btn-tool-cross" class="flex items-center justify-center gap-2 py-2 px-1 rounded-lg border bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors" onclick="UI.setTool('tool_cross')" title="Cross Mark">
+                    <i class="fas fa-times text-red-600"></i>
+                </button>
+                <button id="btn-tool-eraser" class="flex items-center justify-center gap-2 py-2 px-1 rounded-lg border bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors" onclick="UI.setTool('tool_eraser')" title="Eraser">
+                    <i class="fas fa-eraser text-slate-500"></i>
+                </button>
+            </div>
+            
+            <div id="tool-text-settings" class="hidden bg-white rounded-xl border p-3 space-y-2 animate-in shadow-sm">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Text Settings</div>
+                <div class="flex gap-2">
+                    <div class="flex-1">
+                        <label class="text-[9px] text-slate-500 font-bold block mb-1">Size</label>
+                        <input type="number" value="12" class="w-full text-xs p-1.5 border rounded outline-none" onchange="State.textSettings.size = parseInt(this.value)">
+                    </div>
+                    <div>
+                        <label class="text-[9px] text-slate-500 font-bold block mb-1">Color</label>
+                        <input type="color" value="#000000" class="h-7 w-12 p-0 border rounded cursor-pointer" onchange="State.textSettings.color = this.value">
+                    </div>
+                </div>
+                <p class="text-[9px] text-slate-400 italic text-right mt-1">Double-click or use <i class="fas fa-pen text-blue-500"></i> to edit</p>
+            </div>
+
+            <!-- New Shared Options (Opacity) -->
+            <div id="tool-common-settings" class="hidden bg-white rounded-xl border p-3 space-y-2 animate-in shadow-sm">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Options</div>
+                <label class="flex items-center justify-between cursor-pointer hover:bg-slate-50 rounded p-1 -mx-1 transition-colors">
+                    <span class="text-[10px] font-bold text-slate-600">Opaque Background</span>
+                    <input type="checkbox" id="chk-opaque" class="w-3 h-3 text-blue-600 rounded focus:ring-blue-500 border-gray-300" onchange="State.isOpaque = this.checked">
+                </label>
+            </div>
+
+            <div id="tool-eraser-settings" class="hidden bg-white rounded-xl border p-3 animate-in shadow-sm">
+                 <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Eraser Mode</div>
+                 <p class="text-[10px] text-slate-600 font-medium"><i class="fas fa-mouse-pointer mr-1"></i> Drag on the PDF to create a white-out area.</p>
+            </div>
+        </div>
+
+        <div class="flex border-b border-gray-200 bg-white">
+            <button id="tab-data" class="flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 border-blue-600 text-blue-600 bg-blue-50/50">Fields</button>
+            <button id="tab-markers" class="flex-1 py-3 text-xs font-bold uppercase tracking-wider text-gray-400 hover:bg-gray-50 border-b-2 border-transparent">Markers</button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-6" id="sidebar-content"></div>
+
+        <div class="p-4 border-t bg-slate-50 space-y-3">
+            <div id="status-badge" class="text-[10px] text-center font-bold text-amber-600 bg-amber-50 py-1.5 rounded-lg border border-amber-200 hidden">
+                <i class="fas fa-clock mr-1"></i> <span id="draft-count">0</span> ITEMS
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2">
+                <button id="btn-toggle-fields" class="py-2 px-1 rounded-lg border-2 text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-1">
+                    <i class="fas fa-font"></i> Apply Fields
+                </button>
+                <button id="btn-toggle-markers" class="py-2 px-1 rounded-lg border-2 text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-1">
+                    <i class="fas fa-map-marker-alt"></i> Apply Markers
+                </button>
+            </div>
+
+            <button id="btn-download" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-black py-3 rounded-xl shadow-lg text-xs tracking-widest disabled:opacity-30 transition-all uppercase" disabled>
+                <i class="fas fa-download mr-2"></i> Download PDF
+            </button>
+        </div>
+    </nav>
+
+    <!-- MAIN CANVAS -->
+    <main class="flex-1 relative overflow-hidden flex flex-col bg-slate-200">
+        <div id="canvas-container" class="flex-1 overflow-auto p-8 flex flex-col items-center gap-8 relative outline-none" tabindex="0">
+            <div id="empty-state" class="mt-20 text-center opacity-50">
+                <i class="fas fa-file-pdf text-8xl text-slate-400 mb-4"></i>
+                <h2 class="text-2xl font-black text-slate-500 uppercase">No Document</h2>
+                <p class="text-slate-400 font-medium">Open a PDF to start auto-filling.</p>
+            </div>
+        </div>
+
+        <div id="loader" class="absolute inset-0 bg-slate-900/80 z-[200] flex flex-col items-center justify-center hidden backdrop-blur-sm">
+            <div class="loader mb-4"></div>
+            <h2 id="loader-text" class="text-white font-bold text-xl uppercase tracking-tighter">Processing...</h2>
+        </div>
+    </main>
+
+    <!-- SIGNATURE MODAL -->
+    <div id="sig-modal" class="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center hidden backdrop-blur-sm">
+        <div class="bg-white rounded-2xl p-6 w-96 shadow-2xl animate-in">
+            <h3 class="font-black text-lg mb-4 text-slate-800 uppercase flex items-center gap-2"><i class="fas fa-signature text-blue-600"></i> Set Signature</h3>
+            <div class="border-2 border-dashed border-gray-300 rounded-xl mb-4 bg-slate-50 overflow-hidden relative">
+                <canvas id="sig-canvas" width="330" height="150" class="cursor-crosshair bg-white"></canvas>
+            </div>
+            <div class="flex justify-between items-center mb-6 px-1">
+                <label class="text-xs text-blue-600 font-bold cursor-pointer hover:underline flex items-center gap-1">
+                    <i class="fas fa-image"></i> Upload Image
+                    <input type="file" id="sig-upload" accept="image/*" class="hidden" />
+                </label>
+                <button id="btn-sig-clear" class="text-xs text-red-500 font-bold flex items-center gap-1"><i class="fas fa-trash"></i> Clear Pad</button>
+            </div>
+            <div class="flex gap-3">
+                <button id="btn-sig-cancel" class="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+                <button id="btn-sig-save" class="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg transition-transform active:scale-95">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Use pinned version for stability
+        const pdfjsLib = window['pdfjs-dist/build/pdf'];
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        const DEFAULT_FIELDS = [
+            // Data Fields (Auto-Fill enabled with locations)
+            { id: 'name', label: 'Name', value: '', active: true, fontSize: 12, locations: [] },
+            { id: 'addr', label: 'Address', value: '', active: true, fontSize: 12, locations: [] },
+            { id: 'email', label: 'Email', value: '', active: true, fontSize: 12, locations: [] },
+            { id: 'phone', label: 'Phone', value: '', active: true, fontSize: 12, locations: [] },
+            { id: 'date', label: 'Date', value: new Date().toISOString().split('T')[0], active: true, fontSize: 12, locations: [] },
+            { id: 'extra1', label: 'Extra 1', value: '', active: true, fontSize: 12, locations: [] },
+            { id: 'extra2', label: 'Extra 2', value: '', active: true, fontSize: 12, locations: [] },
+            { id: 'sign', label: 'Signature', value: '(Image)', active: true, fontSize: 100, isSig: true, locations: [] },
+            
+            // Markers (Auto-Fill enabled with locations)
+            { id: 'm1', label: 'Sign 1', value: 'Sign 1', active: true, fontSize: 11, isMarker: true, color: '#2563eb', locations: [] },
+            { id: 'm2', label: 'Sign 2', value: 'Sign 2', active: true, fontSize: 11, isMarker: true, color: '#dc2626', locations: [] },
+            { id: 'm3', label: 'Sign', value: 'Sign', active: true, fontSize: 11, isMarker: true, color: '#9333ea', locations: [] }
+        ];
+
+        const loadFields = () => {
+             const s = localStorage.getItem('cpa_pdf_fields');
+             if(!s) return DEFAULT_FIELDS;
+             try {
+                 const p = JSON.parse(s);
+                 // Merge saved data with default structure to ensure all IDs exist
+                 return DEFAULT_FIELDS.map(d => {
+                     const f = p.find(x => x.id === d.id);
+                     return f ? { ...d, ...f } : d;
+                 });
+             } catch(e) { return DEFAULT_FIELDS; }
+        };
+
+        const State = {
+            file: null,
+            pages: [], 
+            drafts: [], // Used for Manual Stamps, Eraser, Text/Check tool.
+            selectedItemId: null,
+            fields: loadFields(),
+            activeTab: 'data',
+            activeTool: 'select', 
+            pickingId: null,
+            signatureImg: localStorage.getItem('cpa_sig_img') || null,
+            history: [],
+            textSettings: { text: '', size: 12, color: '#000000' },
+            isOpaque: false, // NEW: Opaque background setting
+            applyFields: false,
+            applyMarkers: false
+        };
+
+        const Logic = {
+            saveToStorage: () => {
+                localStorage.setItem('cpa_pdf_fields', JSON.stringify(State.fields));
+            },
+
+            loadPdf: async (file) => {
+                UI.showLoader("Loading PDF...");
+                try {
+                    State.file = file; 
+                    const buffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+                    State.pages = []; 
+                    State.drafts = []; 
+                    
+                    const container = document.getElementById('canvas-container');
+                    container.innerHTML = '';
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const viewport = page.getViewport({ scale: 1.5 });
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'canvas-wrapper';
+                        wrapper.style.width = `${viewport.width}px`;
+                        wrapper.style.height = `${viewport.height}px`;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = viewport.width; canvas.height = viewport.height;
+                        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                        const overlay = document.createElement('div');
+                        overlay.id = `overlay-${i-1}`;
+                        overlay.className = 'overlay-layer';
+                        
+                        // Setup Event Listeners for wrapper
+                        wrapper.onmousedown = (e) => Logic.onCanvasMouseDown(e, i-1);
+                        wrapper.onclick = (e) => Logic.onCanvasClick(e, i-1);
+                        
+                        wrapper.appendChild(canvas);
+                        wrapper.appendChild(overlay);
+                        container.appendChild(wrapper);
+                        State.pages.push({ idx: i-1, viewport: page.getViewport({ scale: 1.0 }), width: viewport.width, height: viewport.height });
+                    }
+                    document.getElementById('filename-display').innerText = file.name;
+                    UI.renderSidebar(); UI.renderItems();
+                } catch (e) { alert("Error loading PDF: " + e.message); }
+                UI.hideLoader();
+            },
+
+            onCanvasMouseDown: (e, pIdx) => {
+                if (State.activeTool !== 'tool_eraser') return;
+                if (e.target.closest('.interactive-item')) return;
+
+                const pg = State.pages[pIdx];
+                const rect = e.currentTarget.getBoundingClientRect();
+                const startX = (e.clientX - rect.left) * (pg.viewport.width / rect.width);
+                const startY = pg.viewport.height - ((e.clientY - rect.top) * (pg.viewport.height / rect.height));
+                
+                const id = Math.random().toString(36).substr(2, 9);
+                const itm = { id, pIdx, x: startX, y: startY, w: 0, h: 0, type: 'eraser', isDraft: true };
+                State.drafts.push(itm);
+                
+                const mm = (me) => {
+                    const currentX = (me.clientX - rect.left) * (pg.viewport.width / rect.width);
+                    const currentY = pg.viewport.height - ((me.clientY - rect.top) * (pg.viewport.height / rect.height));
+                    
+                    const actualY = Math.max(startY, currentY); 
+                    const h = Math.abs(startY - currentY);
+                    const w = Math.abs(startX - currentX);
+                    
+                    itm.x = Math.min(startX, currentX);
+                    itm.y = actualY;
+                    itm.w = w;
+                    itm.h = h;
+                    UI.renderItems();
+                };
+
+                const mu = () => {
+                    window.removeEventListener('mousemove', mm);
+                    window.removeEventListener('mouseup', mu);
+                    State.selectedItemId = id;
+                    UI.renderSidebar();
+                    UI.renderItems();
+                };
+
+                window.addEventListener('mousemove', mm);
+                window.addEventListener('mouseup', mu);
+            },
+
+            createSymbolImage: (type) => {
+                const c = document.createElement('canvas');
+                c.width = 100; c.height = 100;
+                const ctx = c.getContext('2d');
+                ctx.font = 'bold 80px Arial, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                if (type === 'check') {
+                    ctx.fillStyle = '#16a34a'; // Green-600
+                    ctx.fillText('✓', 50, 50);
+                } else {
+                    ctx.fillStyle = '#dc2626'; // Red-600
+                    ctx.fillText('✕', 50, 50);
+                }
+                return c.toDataURL();
+            },
+
+            onCanvasClick: (e, pIdx) => {
+                if (e.target.closest('.interactive-item')) return;
+                if (State.activeTool === 'tool_eraser') return; 
+
+                State.selectedItemId = null; UI.renderItems();
+                const rect = e.currentTarget.getBoundingClientRect();
+                const pg = State.pages[pIdx];
+                const x = (e.clientX - rect.left) * (pg.viewport.width / rect.width);
+                const y = pg.viewport.height - ((e.clientY - rect.top) * (pg.viewport.height / rect.height));
+
+                if (State.activeTool === 'pick' && State.pickingId) {
+                    const field = State.fields.find(f => f.id === State.pickingId);
+                    if (field) {
+                        const newLoc = { id: Math.random().toString(36).substr(2, 9), pIdx, x, y };
+                        field.locations.push(newLoc);
+                        State.selectedItemId = newLoc.id; 
+                        Logic.saveToStorage();
+                        UI.renderSidebar();
+                        UI.renderItems();
+                    }
+                } 
+                else if (State.activeTool.startsWith('stamp_')) {
+                    const fieldId = State.activeTool.replace('stamp_', '');
+                    const field = State.fields.find(f => f.id === fieldId);
+                    if (field) {
+                        // Manual Stamp -> Add to Drafts (Not Locations)
+                        let draftProps = {
+                            fontSize: field.fontSize
+                        };
+
+                        if (field.isSig) {
+                            draftProps.type = 'image';
+                            draftProps.content = State.signatureImg;
+                            draftProps.w = field.fontSize; 
+                            draftProps.h = field.fontSize * 0.5;
+                            if(!draftProps.content) { 
+                                draftProps.type = 'text'; 
+                                draftProps.content = '(No Sig)'; 
+                                draftProps.color = '#ccc'; 
+                            }
+                        } else if (field.isMarker) {
+                            draftProps.type = 'marker';
+                            draftProps.content = field.value || field.label;
+                            draftProps.color = field.color;
+                        } else {
+                            draftProps.type = 'text';
+                            draftProps.content = field.value;
+                            draftProps.color = '#000000';
+                        }
+                        
+                        Logic.addDraft(draftProps, pIdx, x, y);
+                        State.activeTool = 'select'; 
+                        UI.renderSidebar();
+                    }
+                }
+                else if (State.activeTool === 'tool_text') {
+                    Logic.addDraft({ 
+                        type: 'text', 
+                        content: '', 
+                        fontSize: State.textSettings.size,
+                        color: State.textSettings.color,
+                        isOpaque: State.isOpaque, // Capture Opacity
+                        isEditing: true 
+                    }, pIdx, x, y);
+                    State.activeTool = 'select'; 
+                    UI.updateToolbarState(); 
+                    UI.renderSidebar();
+                }
+                else if (State.activeTool === 'tool_check') {
+                    Logic.addDraft({
+                        type: 'image',
+                        content: Logic.createSymbolImage('check'),
+                        w: 20, h: 20,
+                        isOpaque: State.isOpaque, // Capture Opacity
+                        isSymbol: true
+                    }, pIdx, x, y);
+                    State.activeTool = 'select';
+                    UI.updateToolbarState();
+                    UI.renderSidebar();
+                }
+                else if (State.activeTool === 'tool_cross') {
+                    Logic.addDraft({
+                        type: 'image',
+                        content: Logic.createSymbolImage('cross'),
+                        w: 20, h: 20,
+                        isOpaque: State.isOpaque, // Capture Opacity
+                        isSymbol: true
+                    }, pIdx, x, y);
+                    State.activeTool = 'select';
+                    UI.updateToolbarState();
+                    UI.renderSidebar();
+                }
+            },
+
+            addDraft: (props, pIdx, x, y) => {
+                const id = Math.random().toString(36).substr(2, 9);
+                let itm = { id, pIdx, x, y, size: props.fontSize || 12, isDraft: true, ...props };
+                State.drafts.push(itm); 
+                State.selectedItemId = id;
+                UI.renderSidebar(); UI.renderItems();
+            },
+
+            saveHistory: () => {
+                State.history.push(JSON.stringify({ drafts: State.drafts, fields: State.fields }));
+                document.getElementById('btn-undo').disabled = false;
+            },
+
+            undo: () => {
+                if (State.history.length === 0) return;
+                const last = JSON.parse(State.history.pop());
+                State.drafts = last.drafts;
+                State.fields = last.fields;
+                State.selectedItemId = null;
+                Logic.saveToStorage();
+                document.getElementById('btn-undo').disabled = State.history.length === 0;
+                UI.renderSidebar(); UI.renderItems();
+            },
+
+            deleteItem: (id) => {
+                const draftIdx = State.drafts.findIndex(i => i.id === id);
+                if (draftIdx !== -1) {
+                    State.drafts.splice(draftIdx, 1);
+                } else {
+                    State.fields.forEach(f => {
+                        if(f.locations) {
+                            const before = f.locations.length;
+                            f.locations = f.locations.filter(l => l.id !== id);
+                            if(f.locations.length !== before) Logic.saveToStorage();
+                        }
+                    });
+                }
+                
+                if (State.selectedItemId === id) State.selectedItemId = null;
+                UI.renderSidebar(); UI.renderItems();
+                document.getElementById('btn-download').disabled = Logic.getTotalItemCount() === 0;
+            },
+            
+            removeLocation: (fieldId, locId) => {
+                const f = State.fields.find(x => x.id === fieldId);
+                if(f) {
+                    f.locations = f.locations.filter(l => l.id !== locId);
+                    Logic.saveToStorage();
+                    UI.renderSidebar();
+                    UI.renderItems();
+                }
+            },
+
+            toggleApplyFields: () => {
+                State.applyFields = !State.applyFields;
+                UI.renderSidebar();
+                UI.renderItems();
+            },
+
+            toggleApplyMarkers: () => {
+                State.applyMarkers = !State.applyMarkers;
+                UI.renderSidebar();
+                UI.renderItems();
+            },
+
+            getTotalItemCount: () => {
+                const fieldLocs = State.fields.reduce((acc, f) => (f.locations ? acc + f.locations.length : acc), 0);
+                return fieldLocs + State.drafts.length;
+            },
+
+            export: async () => {
+                if (!State.file) { alert("No PDF file loaded."); return; }
+                const total = Logic.getTotalItemCount();
+                if (total === 0) { alert("Nothing to export."); return; }
+                UI.showLoader("Generating PDF...");
+                
+                try {
+                    const { PDFDocument, rgb, StandardFonts } = PDFLib;
+                    const pdfDoc = await PDFDocument.load(await State.file.arrayBuffer());
+                    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+                    
+                    // 1. Always include Drafts (Manual)
+                    let allItems = [...State.drafts];
+                    
+                    // 2. Conditionally include Fields & Markers based on Toggle State
+                    State.fields.forEach(f => {
+                        // Check if we should include this field type
+                        const shouldInclude = f.isMarker ? State.applyMarkers : State.applyFields;
+                        
+                        if (shouldInclude) {
+                            f.locations.forEach(loc => {
+                                let renderItem = { ...loc, size: f.fontSize };
+                                if (f.isSig) {
+                                    if(State.signatureImg) {
+                                        renderItem.type = 'image';
+                                        renderItem.content = State.signatureImg;
+                                        renderItem.w = f.fontSize; 
+                                        renderItem.h = f.fontSize * 0.5;
+                                    }
+                                } else if (f.isMarker) {
+                                    renderItem.type = 'marker';
+                                    renderItem.content = f.value || f.label;
+                                    renderItem.color = f.color;
+                                } else {
+                                    renderItem.type = 'text';
+                                    renderItem.content = f.value;
+                                    renderItem.color = '#000000';
+                                }
+                                allItems.push(renderItem);
+                            });
+                        }
+                    });
+
+                    for (const itm of allItems) {
+                        try {
+                            if (itm.pIdx < 0 || itm.pIdx >= pdfDoc.getPageCount()) continue;
+
+                            const pg = pdfDoc.getPage(itm.pIdx);
+                            const safeX = isNaN(itm.x) ? 0 : itm.x;
+                            const safeY = isNaN(itm.y) ? 0 : itm.y;
+                            
+                            const hexToRgb = (hex) => {
+                                if (!hex) return rgb(0,0,0);
+                                const r = parseInt(hex.slice(1,3), 16)/255;
+                                const g = parseInt(hex.slice(3,5), 16)/255;
+                                const b = parseInt(hex.slice(5,7), 16)/255;
+                                return rgb(r, g, b);
+                            };
+
+                            // Opaque Background Rendering for PDF
+                            if (itm.isOpaque) {
+                                let bgW = 0, bgH = 0;
+                                if (itm.type === 'text') {
+                                    const lines = (itm.content || "").split('\n');
+                                    let maxW = 0;
+                                    lines.forEach(l => {
+                                        const w = font.widthOfTextAtSize(l, itm.size);
+                                        if (w > maxW) maxW = w;
+                                    });
+                                    bgW = maxW;
+                                    bgH = lines.length * itm.size;
+                                    // Text Y in PDF is baseline, but rect is bottom-left.
+                                    // Our safeY represents the bottom-left of the element.
+                                    pg.drawRectangle({
+                                        x: safeX,
+                                        y: safeY,
+                                        width: bgW + 2, // Slight padding
+                                        height: bgH + 2,
+                                        color: rgb(1, 1, 1)
+                                    });
+                                } else if (itm.type === 'image') {
+                                    pg.drawRectangle({
+                                        x: safeX,
+                                        y: safeY,
+                                        width: itm.w,
+                                        height: itm.h,
+                                        color: rgb(1, 1, 1)
+                                    });
+                                }
+                            }
+
+                            if (itm.type === 'text') {
+                                const lines = (itm.content || "").split('\n');
+                                const lineHeight = itm.size * 1.0; 
+                                // Added offset (size * 0.2) to compensate for baseline difference between browser (descender included in box) and PDF (baseline origin)
+                                const textY = safeY + (lines.length - 1) * lineHeight + (itm.size * 0.2);
+                                
+                                pg.drawText(itm.content || "", { 
+                                    x: safeX, 
+                                    y: textY, 
+                                    size: itm.size, 
+                                    font, 
+                                    lineHeight: lineHeight, 
+                                    color: hexToRgb(itm.color) 
+                                });
+                            } else if (itm.type === 'marker') {
+                                const c = hexToRgb(itm.color);
+                                const tw = fontBold.widthOfTextAtSize(itm.content || "", itm.size);
+                                pg.drawRectangle({ x: safeX, y: safeY, width: tw + 8, height: itm.size + 4, color: c });
+                                pg.drawText(itm.content || "", { x: safeX + 4, y: safeY + 2, size: itm.size, font: fontBold, color: rgb(1,1,1) });
+                            } else if (itm.type === 'eraser') {
+                                pg.drawRectangle({ x: safeX, y: safeY, width: itm.w, height: itm.h, color: rgb(1,1,1) });
+                            } else if (itm.type === 'image' && itm.content) {
+                                const parts = itm.content.split(',');
+                                const rawBase64 = parts.length > 1 ? parts[1] : parts[0];
+                                const binaryString = window.atob(rawBase64);
+                                const len = binaryString.length;
+                                const bytes = new Uint8Array(len);
+                                for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
+                                
+                                let img;
+                                if (itm.content.includes('image/jpeg') || itm.content.includes('image/jpg')) {
+                                    img = await pdfDoc.embedJpg(bytes);
+                                } else {
+                                    img = await pdfDoc.embedPng(bytes);
+                                }
+                                pg.drawImage(img, { x: safeX, y: safeY, width: itm.w, height: itm.h });
+                            }
+                        } catch(innerE) { console.error("Skipping bad item:", innerE); }
+                    }
+                    const bytes = await pdfDoc.save();
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(new Blob([bytes], {type:'application/pdf'}));
+                    a.download = `Filled_${State.file.name}`;
+                    a.click();
+                } catch(e) { 
+                    console.error(e); 
+                    alert("Export Error: " + e.message + "\nCheck console for details."); 
+                }
+                UI.hideLoader();
+            }
+        };
+
+        const UI = {
+            showLoader: (m) => { document.getElementById('loader-text').innerText = m; document.getElementById('loader').classList.remove('hidden'); },
+            hideLoader: () => document.getElementById('loader').classList.add('hidden'),
+            
+            setTool: (t) => {
+                State.activeTool = (State.activeTool === t) ? 'select' : t;
+                State.pickingId = null; 
+                UI.updateToolbarState();
+                UI.renderSidebar(); 
+            },
+
+            updateToolbarState: () => {
+                const textBtn = document.getElementById('btn-tool-text');
+                const checkBtn = document.getElementById('btn-tool-check');
+                const crossBtn = document.getElementById('btn-tool-cross');
+                const eraserBtn = document.getElementById('btn-tool-eraser');
+                
+                const baseClass = "flex items-center justify-center gap-2 py-2 px-1 rounded-lg border font-bold text-xs transition-colors";
+                const inactiveClass = "bg-white hover:bg-slate-50 text-slate-700";
+                const activeClass = "bg-blue-600 text-white border-blue-600";
+                
+                textBtn.className = `${baseClass} ${State.activeTool === 'tool_text' ? activeClass : inactiveClass}`;
+                textBtn.querySelector('i').className = `fas fa-font ${State.activeTool === 'tool_text' ? 'text-white' : 'text-purple-600'}`;
+                
+                checkBtn.className = `${baseClass} ${State.activeTool === 'tool_check' ? activeClass : inactiveClass}`;
+                checkBtn.querySelector('i').className = `fas fa-check ${State.activeTool === 'tool_check' ? 'text-white' : 'text-green-600'}`;
+                
+                crossBtn.className = `${baseClass} ${State.activeTool === 'tool_cross' ? activeClass : inactiveClass}`;
+                crossBtn.querySelector('i').className = `fas fa-times ${State.activeTool === 'tool_cross' ? 'text-white' : 'text-red-600'}`;
+
+                eraserBtn.className = `${baseClass} ${State.activeTool === 'tool_eraser' ? activeClass : inactiveClass}`;
+                eraserBtn.querySelector('i').className = `fas fa-eraser ${State.activeTool === 'tool_eraser' ? 'text-white' : 'text-slate-500'}`;
+
+                // Show/Hide Settings
+                const ts = document.getElementById('tool-text-settings');
+                const tcs = document.getElementById('tool-common-settings');
+                const es = document.getElementById('tool-eraser-settings');
+
+                if (State.activeTool === 'tool_text') { ts.classList.remove('hidden'); } else { ts.classList.add('hidden'); }
+                
+                // Show Common Settings (Opacity) for Text, Check, Cross
+                if (['tool_text', 'tool_check', 'tool_cross'].includes(State.activeTool)) {
+                    tcs.classList.remove('hidden');
+                } else {
+                    tcs.classList.add('hidden');
+                }
+
+                if (State.activeTool === 'tool_eraser') { es.classList.remove('hidden'); } else { es.classList.add('hidden'); }
+            },
+
+            renderSidebar: () => {
+                const container = document.getElementById('sidebar-content');
+                container.innerHTML = '';
+                
+                UI.updateToolbarState(); // Sync toolbar UI
+
+                const badge = document.getElementById('status-badge');
+                if (State.drafts.length > 0) { badge.classList.remove('hidden'); document.getElementById('draft-count').innerText = State.drafts.length; } 
+                else badge.classList.add('hidden');
+                
+                const hasItems = Logic.getTotalItemCount() > 0;
+                document.getElementById('btn-download').disabled = !hasItems;
+
+                // Update Toggle Button Styles
+                const btnFields = document.getElementById('btn-toggle-fields');
+                const btnMarkers = document.getElementById('btn-toggle-markers');
+
+                if (State.applyFields) {
+                    btnFields.className = "py-2 px-1 rounded-lg border-2 border-blue-600 bg-blue-600 text-white text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-1 shadow-md";
+                    btnFields.innerHTML = '<i class="fas fa-check-circle"></i> Fields: ON';
+                } else {
+                    btnFields.className = "py-2 px-1 rounded-lg border-2 border-slate-200 bg-white text-slate-400 text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-1 hover:border-blue-300 hover:text-blue-500";
+                    btnFields.innerHTML = '<i class="fas fa-circle"></i> Fields: OFF';
+                }
+
+                if (State.applyMarkers) {
+                    btnMarkers.className = "py-2 px-1 rounded-lg border-2 border-purple-600 bg-purple-600 text-white text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-1 shadow-md";
+                    btnMarkers.innerHTML = '<i class="fas fa-check-circle"></i> Markers: ON';
+                } else {
+                    btnMarkers.className = "py-2 px-1 rounded-lg border-2 border-slate-200 bg-white text-slate-400 text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-1 hover:border-purple-300 hover:text-purple-500";
+                    btnMarkers.innerHTML = '<i class="fas fa-circle"></i> Markers: OFF';
+                }
+
+
+                const grid = document.createElement('div'); grid.className = 'grid grid-cols-2 gap-2 mb-6';
+                const sFs = State.fields.filter(f => State.activeTab === 'data' ? !f.isMarker : f.isMarker);
+                sFs.forEach(f => {
+                    const btn = document.createElement('button');
+                    const act = State.activeTool === 'stamp_' + f.id;
+                    btn.className = `flex items-center gap-2 px-3 py-2 rounded-xl border-2 text-[10px] font-bold transition-all ${act ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-slate-100 text-slate-600 hover:border-blue-200'}`;
+                    btn.innerHTML = `<i class="fas ${f.isSig ? 'fa-signature' : 'fa-stamp'} ${act ? 'text-white' : (f.isMarker ? '' : 'text-blue-400')}" ${f.isMarker ? `style="color:${act ? '#fff' : f.color}"` : ''}></i> <span class="truncate">${f.label}</span>`;
+                    btn.onclick = () => { State.activeTool = act ? 'select' : 'stamp_' + f.id; State.pickingId = null; UI.renderSidebar(); };
+                    grid.appendChild(btn);
+                });
+                container.appendChild(grid);
+
+                sFs.forEach(f => {
+                    const div = document.createElement('div');
+                    div.className = `p-3 rounded-xl border mb-2 ${State.pickingId === f.id ? 'border-blue-400 bg-blue-50' : 'bg-white border-slate-200'}`;
+                    
+                    let input;
+                    if (f.isSig) {
+                        if (State.signatureImg) {
+                            input = `<div class="group relative w-full h-12 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden cursor-pointer shadow-sm mt-1" onclick="UI.openSigModal()" title="Change Signature"><img src="${State.signatureImg}" class="h-full w-auto object-contain p-1" /><div class="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/10 transition-colors flex items-center justify-center"><i class="fas fa-pen text-slate-700 bg-white p-1.5 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"></i></div></div>`;
+                        } else {
+                            input = `<button onclick="UI.openSigModal()" class="w-full bg-slate-50 border border-dashed border-slate-300 hover:border-blue-400 hover:text-blue-600 rounded p-2 text-[10px] font-bold text-slate-400 transition-all mt-1 flex flex-col items-center gap-1"><i class="fas fa-signature text-lg"></i><span>Set Signature</span></button>`;
+                        }
+                    } else {
+                        input = `<input type="text" value="${f.value}" oninput="State.fields.find(x=>x.id==='${f.id}').value=this.value; Logic.saveToStorage(); UI.renderItems();" class="w-full text-xs p-1.5 border rounded outline-none focus:border-blue-400 bg-slate-50">`;
+                    }
+                    
+                    // Unified Sidebar UI for both Fields and Markers
+                    let coordList = '';
+                    if (f.locations && f.locations.length > 0) {
+                        coordList = `<div class="flex flex-wrap gap-1 mt-2">`;
+                        f.locations.forEach(loc => {
+                            coordList += `<span class="coord-tag">P${loc.pIdx+1} (${Math.round(loc.x)}, ${Math.round(loc.y)}) <button onclick="Logic.removeLocation('${f.id}', '${loc.id}')">&times;</button></span>`;
+                        });
+                        coordList += `</div>`;
+                    } else {
+                        coordList = `<div class="text-[9px] text-slate-300 mt-2 italic">No locations set</div>`;
+                    }
+
+                    div.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-bold text-slate-700">${f.label}</span>
+                        <div class="flex items-center gap-1">
+                            <span class="text-[8px] text-slate-400 font-bold">Size</span>
+                            <input type="number" value="${f.fontSize}" onchange="State.fields.find(x=>x.id==='${f.id}').fontSize=parseInt(this.value); Logic.saveToStorage(); UI.renderSidebar(); UI.renderItems();" class="w-10 text-[10px] p-0.5 border rounded text-center">
+                            <button onclick="UI.togglePick('${f.id}')" class="text-[10px] px-2 py-0.5 rounded border ${State.pickingId === f.id ? 'bg-blue-500 text-white' : 'bg-white'}">Pick</button>
+                        </div>
+                    </div>
+                    ${input}
+                    ${coordList}
+                    `;
+                    container.appendChild(div);
+                });
+            },
+
+            openSigModal: () => document.getElementById('sig-modal').classList.remove('hidden'),
+            togglePick: (id) => { State.pickingId = (State.pickingId === id) ? null : id; State.activeTool = State.pickingId ? 'pick' : 'select'; UI.renderSidebar(); },
+
+            renderItems: () => {
+                State.pages.forEach(p => {
+                    const layer = document.getElementById(`overlay-${p.idx}`);
+                    if (!layer) return;
+                    layer.innerHTML = '';
+                    
+                    let allRenderItems = [...State.drafts];
+                    
+                    State.fields.forEach(f => {
+                         if(!f.locations) return;
+                         f.locations.forEach(loc => {
+                             if (loc.pIdx !== p.idx) return;
+                             
+                             let rItem = { ...loc, size: f.fontSize, isDraft: false, fieldId: f.id, isMarker: f.isMarker };
+                             
+                             if (f.isSig) {
+                                 rItem.type = 'image';
+                                 rItem.content = State.signatureImg;
+                                 rItem.w = f.fontSize;
+                                 rItem.h = f.fontSize * 0.5;
+                                 if(!rItem.content) { rItem.type='text'; rItem.content='(No Sig)'; rItem.color='#ccc'; }
+                             } else if (f.isMarker) {
+                                 rItem.type = 'marker';
+                                 rItem.content = f.value || f.label;
+                                 rItem.color = f.color;
+                             } else {
+                                 rItem.type = 'text';
+                                 rItem.content = f.value;
+                                 rItem.color = '#000000';
+                             }
+                             allRenderItems.push(rItem);
+                         });
+                    });
+
+                    allRenderItems.filter(itm => itm.pIdx === p.idx).forEach(itm => {
+                        const el = document.createElement('div');
+                        const isS = State.selectedItemId === itm.id;
+                        
+                        // Determine Class based on type and state
+                        let styleClass = 'item-auto item-auto-inactive'; // Default: Blurry
+                        
+                        if (itm.isDraft) {
+                            styleClass = 'item-draft'; // Yellow Manual Stamp
+                        } else {
+                            // It is an Auto-Fill Location
+                            if (itm.isMarker) {
+                                if (State.applyMarkers) styleClass = 'item-auto item-auto-active-marker';
+                            } else {
+                                if (State.applyFields) styleClass = 'item-auto item-auto-active-field';
+                            }
+                        }
+
+                        if (itm.type === 'eraser') styleClass += ' item-eraser';
+
+                        el.className = `interactive-item group ${isS ? 'selected' : ''} ${styleClass}`;
+                        el.style.left = `${itm.x * (p.width / p.viewport.width)}px`;
+                        el.style.top = `${(p.viewport.height - itm.y) * (p.height / p.viewport.height)}px`;
+                        el.style.transform = 'translateY(-100%)';
+                        
+                        // Opaque background application
+                        if (itm.isOpaque) {
+                             el.style.backgroundColor = 'white';
+                             // Add a bit of padding if text so the background covers properly
+                             if(itm.type === 'text') {
+                                 // We don't add padding to el because it shifts position, but visually we might need it? 
+                                 // The current text rendering sets padding:0. 
+                                 // The background will tightly fit the box.
+                             }
+                        }
+
+                        if(itm.type === 'text' || itm.type === 'marker') {
+                            const content = document.createElement('div');
+                            content.innerText = itm.content || "";
+                            content.style.fontSize = `${itm.size * (p.height / p.viewport.height)}px`;
+                            // Force strict line height to 1 to match PDF baseline logic
+                            content.style.lineHeight = '1'; 
+                            content.style.fontFamily = 'Helvetica, Arial, sans-serif';
+                            content.style.whiteSpace = 'pre-wrap';
+                            content.style.textAlign = 'left';
+                            content.style.minWidth = '20px'; // Ensure clickable if empty
+                            content.style.padding = '0'; // Remove inner padding
+
+                            if (itm.color) content.style.color = itm.color; 
+                            if(itm.type === 'marker') { 
+                                content.style.backgroundColor = itm.color; 
+                                content.style.color = 'white'; 
+                                content.className = 'px-2 py-0.5 font-bold rounded shadow'; 
+                            }
+
+                            if (itm.type === 'text' && itm.isEditing) {
+                                content.contentEditable = "true";
+                                content.style.backgroundColor = "rgba(255, 255, 255, 0.9)";
+                                content.style.border = "1px dashed #3b82f6";
+                                content.style.cursor = "text";
+                                content.style.outline = "none";
+                                
+                                content.onmousedown = (e) => e.stopPropagation(); 
+                                content.onblur = () => { 
+                                    itm.content = content.innerText; 
+                                    itm.isEditing = false; 
+                                    UI.renderItems(); 
+                                };
+                                content.onkeydown = (e) => e.stopPropagation();
+
+                                setTimeout(() => content.focus(), 0);
+                            } 
+                            
+                            // Double Click to Edit
+                            if (itm.type === 'text' && !itm.isEditing) {
+                                el.ondblclick = (e) => {
+                                    e.stopPropagation();
+                                    itm.isEditing = true;
+                                    UI.renderItems();
+                                };
+                                
+                                // Add edit button if selected
+                                const editBtn = document.createElement('button');
+                                editBtn.className = 'edit-btn';
+                                editBtn.innerHTML = '<i class="fas fa-pen"></i>';
+                                editBtn.onmousedown = (e) => {
+                                    e.stopPropagation();
+                                    itm.isEditing = true;
+                                    UI.renderItems();
+                                };
+                                el.appendChild(editBtn);
+                            }
+
+                            el.appendChild(content);
+
+                        } else if(itm.type === 'image') {
+                            if (itm.content) {
+                                const img = new Image(); img.src = itm.content;
+                                img.style.width = `${itm.w * (p.width / p.viewport.width)}px`;
+                                img.style.height = 'auto';
+                                el.appendChild(img);
+                            } else {
+                                el.innerText = "(No Image)";
+                                el.style.fontSize = "10px";
+                                el.style.color = "red";
+                            }
+                        } else if(itm.type === 'eraser') {
+                            el.style.width = `${itm.w * (p.width / p.viewport.width)}px`;
+                            el.style.height = `${itm.h * (p.height / p.viewport.height)}px`;
+                        }
+
+                        const handle = document.createElement('div'); handle.className = 'resize-handle';
+                        handle.onmousedown = (e) => { e.stopPropagation(); UI.handleResize(e, itm); };
+                        el.appendChild(handle);
+
+                        const del = document.createElement('button');
+                        del.className = 'delete-btn';
+                        del.innerHTML = '&times;';
+                        del.onmousedown = (e) => { e.stopPropagation(); Logic.deleteItem(itm.id); };
+                        el.appendChild(del);
+
+                        el.onmousedown = (e) => { e.stopPropagation(); State.selectedItemId = itm.id; UI.renderItems(); UI.handleDrag(e, itm); };
+                        layer.appendChild(el);
+                    });
+                });
+            },
+
+            handleDrag: (e, itm) => {
+                const sX = e.clientX, sY = e.clientY, ox = itm.x, oy = itm.y, pg = State.pages[itm.pIdx];
+                const mm = (me) => {
+                    const nx = ox + (me.clientX - sX) * (pg.viewport.width / pg.width);
+                    const ny = oy - (me.clientY - sY) * (pg.viewport.height / pg.height);
+                    
+                    if (itm.fieldId) {
+                        const f = State.fields.find(x => x.id === itm.fieldId);
+                        if(f && f.locations) {
+                             const loc = f.locations.find(l => l.id === itm.id);
+                             if (loc) { loc.x = nx; loc.y = ny; }
+                        }
+                    } else {
+                        itm.x = nx; itm.y = ny;
+                    }
+                    UI.renderItems();
+                };
+                const mu = () => { 
+                    window.removeEventListener('mousemove', mm); 
+                    window.removeEventListener('mouseup', mu); 
+                    Logic.saveToStorage();
+                    UI.renderSidebar(); 
+                };
+                window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
+            },
+
+            handleResize: (e, itm) => {
+                const sX = e.clientX, sY = e.clientY;
+                const oSize = itm.size || 12;
+                const oW = itm.w || 20; const oH = itm.h || 20;
+                const pg = State.pages[itm.pIdx];
+                const ratio = (oW > 0 && oH > 0) ? (oW / oH) : 1; 
+                
+                const mm = (me) => {
+                    const dx = (me.clientX - sX) * (pg.viewport.width / pg.width);
+                    const dy = (me.clientY - sY) * (pg.viewport.height / pg.height); 
+                    
+                    if (itm.type === 'image' || itm.type === 'eraser') { 
+                        if (itm.type === 'eraser') {
+                            itm.w = Math.max(10, oW + dx);
+                            itm.h = Math.max(10, oH - dy);
+                        } else {
+                            if (itm.fieldId) {
+                                const f = State.fields.find(x => x.id === itm.fieldId);
+                                f.fontSize = Math.max(20, oSize + dx); 
+                            } else {
+                                const newW = Math.max(10, oW + dx);
+                                itm.w = newW;
+                                itm.h = newW / ratio;
+                            }
+                        }
+                    } else { 
+                        const newSize = Math.max(6, oSize + (dx * 0.5));
+                        if (itm.fieldId) {
+                            const f = State.fields.find(x => x.id === itm.fieldId);
+                            if (f) f.fontSize = newSize;
+                        } else {
+                            itm.size = newSize;
+                        }
+                    }
+                    UI.renderItems();
+                };
+                const mu = () => { 
+                    window.removeEventListener('mousemove', mm); 
+                    window.removeEventListener('mouseup', mu);
+                    Logic.saveToStorage();
+                    UI.renderSidebar(); 
+                };
+                window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
+            }
+        };
+
+        window.onload = () => {
+            document.getElementById('file-input').onchange = (e) => { if(e.target.files[0]) Logic.loadPdf(e.target.files[0]); };
+            document.getElementById('tab-data').onclick = () => { State.activeTab = 'data'; UI.renderSidebar(); };
+            document.getElementById('tab-markers').onclick = () => { State.activeTab = 'markers'; UI.renderSidebar(); };
+            
+            // Separate Button Logic
+            document.getElementById('btn-toggle-fields').onclick = Logic.toggleApplyFields;
+            document.getElementById('btn-toggle-markers').onclick = Logic.toggleApplyMarkers;
+            document.getElementById('btn-download').onclick = Logic.export;
+            
+            document.getElementById('btn-undo').onclick = Logic.undo;
+            window.addEventListener('keydown', (e) => {
+                if ((e.key === 'Delete' || e.key === 'Backspace') && State.selectedItemId) {
+                    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.isContentEditable) return;
+                    Logic.deleteItem(State.selectedItemId);
+                }
+            });
+            const sc = document.getElementById('sig-canvas'), sctx = sc.getContext('2d');
+            let dr = false;
+            sc.onmousedown = (e) => { dr = true; sctx.beginPath(); sctx.moveTo(e.offsetX, e.offsetY); sctx.lineWidth = 2; sctx.lineCap = "round"; };
+            sc.onmousemove = (e) => { if(dr) { sctx.lineTo(e.offsetX, e.offsetY); sctx.stroke(); } };
+            sc.onmouseup = () => dr = false;
+            document.getElementById('btn-sig-clear').onclick = () => sctx.clearRect(0,0,330,150);
+            document.getElementById('btn-sig-save').onclick = () => { 
+                State.signatureImg = sc.toDataURL(); localStorage.setItem('cpa_sig_img', State.signatureImg); 
+                document.getElementById('sig-modal').classList.add('hidden'); UI.renderSidebar(); UI.renderItems();
+            };
+            document.getElementById('btn-sig-cancel').onclick = () => document.getElementById('sig-modal').classList.add('hidden');
+            document.getElementById('sig-upload').onchange = (e) => {
+                if(e.target.files[0]) {
+                    const r = new FileReader();
+                    r.onload = (ev) => { const i = new Image(); i.onload = () => { sctx.clearRect(0,0,330,150); sctx.drawImage(i, 0,0,330,150); }; i.src = ev.target.result; };
+                    r.readAsDataURL(e.target.files[0]);
+                }
+            };
+            UI.renderSidebar();
+        };
+    </script>
+</body>
+</html>
