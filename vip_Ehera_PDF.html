@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ehera PDF - Ark of Ease Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Libraries for Compression and Zipping -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        /* Smooth fade for the accent bar */
+        .accent-bar {
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* Modal Animation */
+        .modal {
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .modal.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            transform: scale(0.95);
+            transition: transform 0.3s ease;
+        }
+        .modal.active .modal-content {
+            transform: scale(1);
+        }
+    </style>
+</head>
+<body class="bg-neutral-950 text-neutral-200 min-h-screen">
+
+    <div class="max-w-7xl mx-auto px-6 py-12">
+        
+        <!-- Header Section -->
+        <header class="mb-12 border-b border-neutral-800 pb-8 flex flex-col md:flex-row justify-between gap-4">
+            <div>
+                <h1 class="text-4xl md:text-5xl font-black text-white mb-2 uppercase tracking-tighter">
+                    <span class="text-sky-500 mr-2"><i class="fas fa-cube"></i></span> EHERA PDF
+                </h1>
+                <p class="text-neutral-400 font-bold uppercase tracking-widest text-sm">By Ark of Ease</p>
+            </div>
+            <div class="md:text-right md:self-start pt-1">
+                <span class="text-[10px] md:text-xs font-bold text-rose-500/70 border border-rose-500/20 bg-rose-500/5 px-2 py-1 rounded">
+                    <i class="fas fa-ban mr-1"></i> No Unauthorized Distribution
+                </span>
+            </div>
+        </header>
+
+        <!-- Section Label -->
+        <div class="mb-6">
+            <h2 class="text-xs font-bold text-neutral-500 uppercase tracking-widest pl-1">Document Management Tools</h2>
+        </div>
+
+        <!-- Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            
+            <!-- File Preparer (Sky Blue) -->
+            <a href="preparer.html" class="group relative block p-8 bg-neutral-900 rounded-xl border border-neutral-800 hover:bg-[#171717] transition-all overflow-hidden">
+                <div class="absolute right-0 top-0 bottom-0 w-1.5 bg-sky-500 rounded-l translate-x-full group-hover:translate-x-0 accent-bar"></div>
+                <div class="flex items-start justify-between mb-6">
+                    <div class="w-14 h-14 bg-sky-900/20 text-sky-400 rounded-xl flex items-center justify-center border border-sky-500/10 group-hover:border-sky-500/50 transition-colors">
+                        <i class="fas fa-toolbox text-2xl"></i>
+                    </div>
+                </div>
+                <h3 class="text-xl font-black text-white mb-2 uppercase tracking-tight group-hover:text-sky-400 transition-colors">File Preparer</h3>
+                <p class="text-neutral-400 text-sm leading-relaxed font-medium">Merge multiple files, split documents, or convert images to PDF.</p>
+            </a>
+
+            <!-- Organizer & Aditor (Orange - High Contrast) -->
+            <a href="organizer.html" class="group relative block p-8 bg-neutral-900 rounded-xl border border-neutral-800 hover:bg-[#171717] transition-all overflow-hidden">
+                <div class="absolute right-0 top-0 bottom-0 w-1.5 bg-orange-500 rounded-l translate-x-full group-hover:translate-x-0 accent-bar"></div>
+                <div class="flex items-start justify-between mb-6">
+                    <div class="w-14 h-14 bg-orange-900/20 text-orange-400 rounded-xl flex items-center justify-center border border-orange-500/10 group-hover:border-orange-500/50 transition-colors">
+                        <i class="fas fa-layer-group text-2xl"></i>
+                    </div>
+                </div>
+                <h3 class="text-xl font-black text-white mb-2 uppercase tracking-tight group-hover:text-orange-400 transition-colors">Organizer & Aditor</h3>
+                <p class="text-neutral-400 text-sm leading-relaxed font-medium">Reorder pages, rotate, and delete unnecessary pages from your documents.</p>
+            </a>
+
+            <!-- Redact OCR (Rose Red) -->
+            <a href="redact.html" class="group relative block p-8 bg-neutral-900 rounded-xl border border-neutral-800 hover:bg-[#171717] transition-all overflow-hidden">
+                <div class="absolute right-0 top-0 bottom-0 w-1.5 bg-rose-500 rounded-l translate-x-full group-hover:translate-x-0 accent-bar"></div>
+                <div class="flex items-start justify-between mb-6">
+                    <div class="w-14 h-14 bg-rose-900/20 text-rose-400 rounded-xl flex items-center justify-center border border-rose-500/10 group-hover:border-rose-500/50 transition-colors">
+                        <i class="fas fa-user-secret text-2xl"></i>
+                    </div>
+                </div>
+                <h3 class="text-xl font-black text-white mb-2 uppercase tracking-tight group-hover:text-rose-400 transition-colors">Redact OCR</h3>
+                <p class="text-neutral-400 text-sm leading-relaxed font-medium">Automatically detect sensitive information and apply secure redactions.</p>
+            </a>
+
+            <!-- Auto-Filler (Emerald Green) -->
+            <a href="autofill.html" class="group relative block p-8 bg-neutral-900 rounded-xl border border-neutral-800 hover:bg-[#171717] transition-all overflow-hidden">
+                <div class="absolute right-0 top-0 bottom-0 w-1.5 bg-emerald-500 rounded-l translate-x-full group-hover:translate-x-0 accent-bar"></div>
+                <div class="flex items-start justify-between mb-6">
+                    <div class="w-14 h-14 bg-emerald-900/20 text-emerald-400 rounded-xl flex items-center justify-center border border-emerald-500/10 group-hover:border-emerald-500/50 transition-colors">
+                        <i class="fas fa-stamp text-2xl"></i>
+                    </div>
+                </div>
+                <h3 class="text-xl font-black text-white mb-2 uppercase tracking-tight group-hover:text-emerald-400 transition-colors">Auto-Filler</h3>
+                <p class="text-neutral-400 text-sm leading-relaxed font-medium">Automatically insert text or signatures at specified coordinates on PDF forms.</p>
+            </a>
+
+            <!-- File Compressor Trigger (Violet/Purple) -->
+            <div onclick="openModal()" class="cursor-pointer group relative block p-8 bg-neutral-900 rounded-xl border border-neutral-800 hover:bg-[#171717] transition-all overflow-hidden">
+                <div class="absolute right-0 top-0 bottom-0 w-1.5 bg-violet-500 rounded-l translate-x-full group-hover:translate-x-0 accent-bar"></div>
+                <div class="flex items-start justify-between mb-6">
+                    <div class="w-14 h-14 bg-violet-900/20 text-violet-400 rounded-xl flex items-center justify-center border border-violet-500/10 group-hover:border-violet-500/50 transition-colors">
+                        <i class="fas fa-compress text-2xl"></i>
+                    </div>
+                </div>
+                <h3 class="text-xl font-black text-white mb-2 uppercase tracking-tight group-hover:text-violet-400 transition-colors">File Compressor</h3>
+                <p class="text-neutral-400 text-sm leading-relaxed font-medium">Reduce file size of PDFs and images directly here. Supports Batch.</p>
+            </div>
+
+            <!-- Guide (Amber/Yellow) -->
+            <div onclick="openGuideModal()" class="cursor-pointer group relative block p-8 bg-neutral-900 rounded-xl border border-neutral-800 hover:bg-[#171717] transition-all overflow-hidden">
+                <div class="absolute right-0 top-0 bottom-0 w-1.5 bg-amber-500 rounded-l translate-x-full group-hover:translate-x-0 accent-bar"></div>
+                <div class="flex items-start justify-between mb-6">
+                    <div class="w-14 h-14 bg-amber-900/20 text-amber-400 rounded-xl flex items-center justify-center border border-amber-500/10 group-hover:border-amber-500/50 transition-colors">
+                        <i class="fas fa-book-open text-2xl"></i>
+                    </div>
+                </div>
+                <h3 class="text-xl font-black text-white mb-2 uppercase tracking-tight group-hover:text-amber-400 transition-colors">Guide</h3>
+                <p class="text-neutral-400 text-sm leading-relaxed font-medium">User manual and instructions on how to use Ehera PDF tools effectively.</p>
+            </div>
+
+        </div>
+
+        <!-- Disclaimer -->
+        <div class="mt-20 pt-8 border-t border-neutral-900 text-center">
+            <p class="text-[10px] text-neutral-600 uppercase tracking-widest font-bold mb-2">Disclaimer</p>
+            <p class="text-neutral-500 text-xs max-w-2xl mx-auto leading-relaxed">
+                This software is provided "as is", without warranty of any kind, express or implied. 
+                In no event shall the authors or copyright holders be liable for any claim, damages or other liability, 
+                whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or the use or other dealings in the software.
+                Use at your own risk.
+            </p>
+        </div>
+    </div>
+
+    <!-- COMPRESSOR MODAL -->
+    <div id="compressorModal" class="modal fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div class="modal-content bg-neutral-900 w-full max-w-2xl rounded-2xl border border-neutral-800 shadow-2xl flex flex-col max-h-[90vh]">
+            
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-6 border-b border-neutral-800">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-violet-900/20 text-violet-400 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-compress"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-white">File Compressor</h2>
+                </div>
+                <button onclick="closeModal()" class="text-neutral-400 hover:text-white transition-colors">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="p-6 overflow-y-auto flex-1">
+                
+                <!-- Drop Zone -->
+                <div id="dropZone" class="border-2 border-dashed border-neutral-700 bg-neutral-950/50 rounded-xl p-10 text-center transition-colors hover:border-violet-500 hover:bg-violet-900/5">
+                    <input type="file" id="fileInput" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" class="hidden">
+                    <div class="pointer-events-none">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-neutral-600 mb-4"></i>
+                        <p class="text-neutral-300 font-medium text-lg mb-1">Drag & Drop files here</p>
+                        <p class="text-neutral-500 text-sm">or click to browse (PDF, JPG, PNG)</p>
+                    </div>
+                    <button onclick="document.getElementById('fileInput').click()" class="mt-4 bg-violet-600 hover:bg-violet-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
+                        Select Files
+                    </button>
+                </div>
+
+                <!-- Settings -->
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Quality Slider -->
+                    <div class="flex flex-col space-y-3 bg-neutral-950 p-4 rounded-lg border border-neutral-800">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-medium text-neutral-400">Image Quality</span>
+                            <span id="qualityValue" class="text-sm font-bold text-violet-400">70%</span>
+                        </div>
+                        <input type="range" id="qualityRange" min="10" max="90" value="70" class="w-full h-2 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-violet-500">
+                    </div>
+
+                    <!-- Max Width Select -->
+                    <div class="flex flex-col space-y-3 bg-neutral-950 p-4 rounded-lg border border-neutral-800">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-medium text-neutral-400">Resize (Images)</span>
+                        </div>
+                        <select id="maxWidthSelect" class="bg-neutral-800 text-white text-sm rounded-lg px-3 py-2 border border-neutral-700 focus:outline-none focus:border-violet-500 transition-colors">
+                            <option value="0">Original (No Resize)</option>
+                            <option value="1920">1920px (Full HD)</option>
+                            <option value="1280">1280px (HD)</option>
+                            <option value="800">800px (Web)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- File List -->
+                <div id="fileList" class="mt-6 space-y-3 hidden">
+                    <!-- Dynamic file items will be added here -->
+                </div>
+
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-6 border-t border-neutral-800 flex justify-end space-x-3 bg-neutral-900 rounded-b-2xl">
+                <button onclick="closeModal()" class="px-5 py-2.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors text-sm font-medium">Cancel</button>
+                <button id="downloadAllBtn" onclick="downloadAll()" disabled class="px-5 py-2.5 rounded-lg bg-neutral-800 text-neutral-500 cursor-not-allowed transition-colors text-sm font-medium flex items-center">
+                    <i class="fas fa-download mr-2"></i> Download All (.zip)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GUIDE MODAL -->
+    <div id="guideModal" class="modal fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div class="modal-content bg-neutral-900 w-full max-w-4xl rounded-2xl border border-neutral-800 shadow-2xl flex flex-col max-h-[90vh]">
+            
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-6 border-b border-neutral-800">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-amber-900/20 text-amber-400 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-book-open"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-white">User Guide</h2>
+                </div>
+                <button onclick="closeGuideModal()" class="text-neutral-400 hover:text-white transition-colors">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex border-b border-neutral-800">
+                <button onclick="switchGuideTab('en')" id="tab-en" class="flex-1 py-4 text-sm font-bold text-white border-b-2 border-amber-500 bg-neutral-800/50 hover:bg-neutral-800 transition-colors">
+                    English
+                </button>
+                <button onclick="switchGuideTab('ko')" id="tab-ko" class="flex-1 py-4 text-sm font-bold text-neutral-500 hover:text-neutral-300 border-b-2 border-transparent hover:bg-neutral-800 transition-colors">
+                    한국어
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="p-8 overflow-y-auto leading-relaxed text-neutral-300 space-y-6 flex-1">
+                
+                <!-- English Content -->
+                <div id="guide-content-en">
+                    <div class="space-y-6">
+                        <div class="bg-neutral-800/50 p-6 rounded-xl border border-neutral-800">
+                            <h3 class="text-white font-bold text-lg mb-4"><i class="fas fa-info-circle text-sky-500 mr-2"></i> About Ehera PDF</h3>
+                            <ul class="space-y-4 text-sm text-neutral-400 list-disc pl-5">
+                                <li>
+                                    <strong class="text-neutral-200">Personal Project:</strong> This application was created by an individual. Unauthorized distribution is prohibited.
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">Security:</strong> This app runs entirely in your browser (client-side). Your files are processed on your own computer and are never uploaded to a server, so you don't need to worry about data security.
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">Origin:</strong> Designed by a CPA office practitioner based on practical experience to address inconveniences found in other software.
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">Download Source:</strong> You can download the source code from my blog: <a href="https://arkofease.blogspot.com/" target="_blank" class="text-sky-400 hover:text-sky-300 underline">arkofease.blogspot.com</a>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="bg-neutral-800/50 p-6 rounded-xl border border-neutral-800">
+                            <h3 class="text-white font-bold text-lg mb-4"><i class="fas fa-exclamation-triangle text-amber-500 mr-2"></i> Limitations & Adobe Comparison</h3>
+                            <p class="text-sm text-neutral-400 mb-4">
+                                While this tool offers unique features, it cannot replicate Adobe's proprietary technology. It is designed as a <strong>substitute</strong>, not a full replacement.
+                            </p>
+                            <ul class="space-y-4 text-sm text-neutral-400 list-disc pl-5">
+                                <li>
+                                    <strong class="text-neutral-200">Password Protection:</strong> Documents protected by passwords cannot be opened due to Adobe's encryption standards.
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">Fillable Forms:</strong> Advanced features like Adobe Fillable Forms are not recognized by this app.
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">"Aditor" (Add + Editor):</strong> You can <em>add</em> text to forms, and text created within this app is editable. However, <strong class="text-rose-400">you cannot edit existing text</strong> in the PDF. To correct errors, use the <strong>White-out</strong> feature to cover the text and then type over it. (For copying text, free Adobe Reader is recommended).
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">Excel Export:</strong> Direct export to Excel is not supported. However, you can crop a table to a blank page and use Excel's "Data from PDF" feature (or AI tools) to import the data.
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Tool Manuals Section -->
+                        <div class="mt-8 border-t border-neutral-800 pt-8">
+                            <h3 class="text-xl font-bold text-white mb-6 flex items-center">
+                                <span class="text-sky-500 mr-2"><i class="fas fa-toolbox"></i></span> Tool Manuals
+                            </h3>
+                            
+                            <!-- File Preparer Guide -->
+                            <div class="bg-neutral-800/30 p-6 rounded-xl border border-neutral-800 mb-6">
+                                <h4 class="text-sky-400 font-bold text-lg mb-3">1. File Preparer</h4>
+                                <div class="space-y-4 text-sm text-neutral-400">
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Merge Tab:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>Combine multiple PDFs or Images into a single PDF.</li>
+                                            <li><strong>Sorting:</strong> Drag & drop to reorder, or use "Sort" to auto-arrange based on keyword priority (e.g., W2, 1099).</li>
+                                            <li><strong>Options:</strong> Generate a "Table of Contents" with clickable links and add page numbers to the footer of every page.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Extract Tab:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>PDF:</strong> Save specific pages (e.g., "1-3, 5") from a document. Choose "Merge Result" to create a single file or "Split Result" for separate files.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Split Tab:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>Divide a single page into multiple horizontal or vertical segments (e.g., separating receipts).</li>
+                                            <li>Select pages from the grid, click "Apply Split Tool", and adjust cut lines in the preview window.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Organizer & Aditor Guide -->
+                            <div class="bg-neutral-800/30 p-6 rounded-xl border border-neutral-800 mb-6">
+                                <h4 class="text-orange-400 font-bold text-lg mb-3">2. Organizer & Aditor</h4>
+                                <div class="space-y-4 text-sm text-neutral-400">
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Organizer (Page Management):</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>Reorder:</strong> Drag and drop pages to rearrange them.</li>
+                                            <li><strong>Manage:</strong> Rotate, Delete, Duplicate pages, or Insert Blank pages using the toolbar.</li>
+                                            <li><strong>Import:</strong> Combine multiple PDFs and images into one workspace.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Aditor (Editor):</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>Tools:</strong> Add Text, Checkmarks/Crossmarks, Highlights, Red Boxes, Lines, and Signatures.</li>
+                                            <li><strong>White-out:</strong> Use the Erase tool to cover text or errors.</li>
+                                            <li><strong>Crop & Paste:</strong> Use 'CROP' on the main screen to copy an area (like a table), then 'PASTE' it onto any page in the editor.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Redact OCR Guide -->
+                            <div class="bg-neutral-800/30 p-6 rounded-xl border border-neutral-800 mb-6">
+                                <h4 class="text-rose-400 font-bold text-lg mb-3">3. Redact OCR</h4>
+                                <div class="space-y-4 text-sm text-neutral-400">
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Auto-Detection:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>Keywords:</strong> Enter words like "Confidential" or specific numbers to find and mask them automatically.</li>
+                                            <li><strong>SSN:</strong> Enable "Auto-detect SSN" to find Social Security Numbers. Choose between Full Mask (XXX-XX-XXXX) or Partial Mask (XXX-XX-****).</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Manual Tools:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>Drag to Redact:</strong> Simply click and drag over any text or area to mask it immediately.</li>
+                                            <li><strong>Review:</strong> After scanning, a list of matches appears. You can select specific items to redact or discard others.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Safe Export:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>The exported PDF is flattened (converted to images). Redacted data is permanently removed and cannot be uncovered by selecting text.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Auto-Filler Guide -->
+                            <div class="bg-neutral-800/30 p-6 rounded-xl border border-neutral-800 mb-6">
+                                <h4 class="text-emerald-400 font-bold text-lg mb-3">4. Auto-Filler</h4>
+                                <div class="space-y-4 text-sm text-neutral-400">
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Fields & Markers:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>Pick & Place:</strong> Select a data field (e.g., Name, Date) or a colored Marker from the sidebar. Click "Pick" and tap on the PDF to assign locations for that data.</li>
+                                            <li><strong>Values:</strong> You can edit the text values in the sidebar, and they will update across all assigned locations.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Manual Tools:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>Use the toolbar to stamp <strong>Text</strong>, <strong>Checkmarks</strong>, or <strong>Crossmarks</strong> anywhere on the document.</li>
+                                            <li><strong>Eraser:</strong> Create white boxes to cover existing content.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Apply & Export:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>Toggle "Apply Fields" or "Apply Markers" at the bottom to visualize the auto-filled data.</li>
+                                            <li>Click "Download PDF" to burn all fields and stamps into a new file.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- File Compressor Guide -->
+                            <div class="bg-neutral-800/30 p-6 rounded-xl border border-neutral-800 mb-6">
+                                <h4 class="text-violet-400 font-bold text-lg mb-3">5. File Compressor</h4>
+                                <div class="space-y-4 text-sm text-neutral-400">
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Compression & Resizing:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>Reduce Size:</strong> Shrink PDF documents and Images (JPG, PNG, WebP) to save space or meet upload requirements.</li>
+                                            <li><strong>Image Options:</strong> Adjust quality percentage (10-90%) and resize dimensions (e.g., Full HD 1920px) for optimal balance between quality and file size.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Batch Processing:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>Drag and drop multiple files to process them simultaneously.</li>
+                                            <li>Download files individually or grab them all at once as a ZIP archive.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Korean Content -->
+                <div id="guide-content-ko" class="hidden">
+                    <div class="space-y-6">
+                        <div class="bg-neutral-800/50 p-6 rounded-xl border border-neutral-800">
+                            <h3 class="text-white font-bold text-lg mb-4"><i class="fas fa-info-circle text-sky-500 mr-2"></i> Ehera PDF 소개</h3>
+                            <ul class="space-y-4 text-sm text-neutral-400 list-disc pl-5">
+                                <li>
+                                    <strong class="text-neutral-200">개인 프로젝트:</strong> 이 프로그램은 개인이 제작하였습니다. 무단 배포는 금지되어 있습니다.
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">보안 (Security):</strong> 이 앱은 사용자의 컴퓨터(브라우저) 내에서 독립적으로 실행됩니다. 파일이 외부 서버로 전송되지 않으므로 보안 걱정 없이 안전하게 사용할 수 있습니다.
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">개발 배경:</strong> CPA 사무실 실무자가 Adobe를 사용하면서 느꼈던 불편함을 개선하기 위해 직접 제작하였습니다.
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">소스 코드 다운로드:</strong> 제 블로그에서 전체 코드를 받으실 수 있습니다: <a href="https://arkofease.blogspot.com/" target="_blank" class="text-sky-400 hover:text-sky-300 underline">arkofease.blogspot.com</a>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="bg-neutral-800/50 p-6 rounded-xl border border-neutral-800">
+                            <h3 class="text-white font-bold text-lg mb-4"><i class="fas fa-exclamation-triangle text-amber-500 mr-2"></i> 한계점 및 Adobe와의 차이</h3>
+                            <p class="text-sm text-neutral-400 mb-4">
+                                이 앱은 업무를 보조하는 <strong>대체재(Substitute)</strong>이며, Adobe의 고도화된 기술력을 완전히 대체할 수는 없습니다. 다음과 같은 한계가 있습니다.
+                            </p>
+                            <ul class="space-y-4 text-sm text-neutral-400 list-disc pl-5">
+                                <li>
+                                    <strong class="text-neutral-200">비밀번호 문서:</strong> 비밀번호가 걸려있는 암호화된 문서는 Adobe의 보안 기술로 인해 열 수 없습니다.
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">양식 (Fillable Forms):</strong> Adobe에서 생성된 특수 필기 가능 양식 등은 이 앱에서 인식하지 못할 수 있습니다.
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">"Aditor" (Add + Editor):</strong> 이름처럼 텍스트를 <strong>추가(Add)</strong>할 수는 있지만, PDF 원본의 글자를 <strong>수정(Edit)</strong>할 수는 없습니다.
+                                    <br><span class="text-neutral-500 mt-1 block">- 앱에서 새로 입력한 글자는 수정 가능합니다.</span>
+                                    <span class="text-neutral-500 block">- 원본 글자를 고치려면 <strong>'화이트(White-out)'</strong> 기능으로 지운 후 다시 입력해야 합니다.</span>
+                                    <span class="text-neutral-500 block">- 텍스트 복사가 필요하다면 무료 Adobe Reader 사용을 권장합니다.</span>
+                                </li>
+                                <li>
+                                    <strong class="text-neutral-200">엑셀 변환 (Export to Excel):</strong> 엑셀로 내보내기 기능은 없습니다. 대신 테이블을 잘라내기(Crop)하여 빈 페이지에 붙여넣은 후, 엑셀의 "Data from PDF" 기능이나 AI를 활용하면 변환이 가능합니다.
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Tool Manuals Section (Korean) -->
+                        <div class="mt-8 border-t border-neutral-800 pt-8">
+                            <h3 class="text-xl font-bold text-white mb-6 flex items-center">
+                                <span class="text-sky-500 mr-2"><i class="fas fa-toolbox"></i></span> 사용 설명서 (Tool Manuals)
+                            </h3>
+                            
+                            <!-- File Preparer Guide -->
+                            <div class="bg-neutral-800/30 p-6 rounded-xl border border-neutral-800 mb-6">
+                                <h4 class="text-sky-400 font-bold text-lg mb-3">1. File Preparer (파일 준비)</h4>
+                                <div class="space-y-4 text-sm text-neutral-400">
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Merge (병합) 탭:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>여러 개의 PDF 또는 이미지 파일을 하나의 PDF로 합칩니다.</li>
+                                            <li><strong>정렬:</strong> 드래그 앤 드롭으로 순서를 바꾸거나, "Sort" 버튼을 눌러 중요 키워드(W2, 1099 등) 순으로 자동 정렬할 수 있습니다.</li>
+                                            <li><strong>옵션:</strong> 클릭 가능한 "목차(Table of Contents)"를 생성하고, 모든 페이지 하단에 페이지 번호를 매길 수 있습니다.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Extract (추출) 탭:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>PDF:</strong> 문서에서 특정 페이지(예: "1-3, 5")만 뽑아냅니다. 결과물을 하나로 합치거나(Merge Result), 각각의 파일로 분리(Split Result)할 수 있습니다.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Split (분할) 탭:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>한 페이지를 수평 또는 수직으로 여러 조각으로 자릅니다 (예: 한 장에 두 개의 영수증이 있는 경우 분리).</li>
+                                            <li>그리드에서 페이지를 선택한 후 "Apply Split Tool"을 누르면 미리보기 창에서 자르는 선을 조정할 수 있습니다.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Organizer & Aditor Guide -->
+                            <div class="bg-neutral-800/30 p-6 rounded-xl border border-neutral-800 mb-6">
+                                <h4 class="text-orange-400 font-bold text-lg mb-3">2. Organizer & Aditor (정리 및 편집)</h4>
+                                <div class="space-y-4 text-sm text-neutral-400">
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Organizer (페이지 관리):</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>순서 변경:</strong> 페이지를 드래그 앤 드롭하여 순서를 바꿉니다.</li>
+                                            <li><strong>관리:</strong> 툴바를 사용해 페이지 회전, 삭제, 복제, 또는 빈 페이지 추가를 할 수 있습니다.</li>
+                                            <li><strong>가져오기:</strong> 여러 PDF와 이미지를 불러와 작업할 수 있습니다.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">Aditor (에디터):</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>도구:</strong> 텍스트, 체크/X 표시, 형광펜, 빨간 박스, 선, 서명 등을 추가합니다.</li>
+                                            <li><strong>화이트(White-out):</strong> 지우개 도구로 글자나 오타를 가릴 수 있습니다.</li>
+                                            <li><strong>자르기 & 붙여넣기:</strong> 메인 화면의 'CROP' 기능으로 특정 영역(예: 표)을 복사한 뒤, 에디터 안에서 'PASTE' 하여 붙여넣을 수 있습니다.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Redact OCR Guide -->
+                            <div class="bg-neutral-800/30 p-6 rounded-xl border border-neutral-800 mb-6">
+                                <h4 class="text-rose-400 font-bold text-lg mb-3">3. Redact OCR (개인정보 보호)</h4>
+                                <div class="space-y-4 text-sm text-neutral-400">
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">자동 감지 (Auto-Detection):</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>키워드:</strong> "대외비" 같은 단어나 특정 번호를 입력하면 자동으로 찾아 마스킹합니다.</li>
+                                            <li><strong>주민/사회보장번호 (SSN):</strong> SSN 자동 감지를 켜면 번호 패턴을 찾아냅니다. 전체 마스킹 또는 부분 마스킹(XXX-XX-****)을 선택할 수 있습니다.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">수동 도구 (Manual Tools):</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>드래그 마스킹:</strong> 문서의 아무 곳이나 클릭하고 드래그하면 즉시 검은색으로 가려집니다.</li>
+                                            <li><strong>검토 (Review):</strong> 스캔 후 감지된 목록이 나타납니다. 원하는 항목만 선택하여 적용할 수 있습니다.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">안전한 저장 (Safe Export):</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>저장된 PDF는 이미지화(Flatten) 처리됩니다. 가려진 정보는 영구적으로 삭제되어, 텍스트 선택이나 복구로 알아낼 수 없습니다.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Auto-Filler Guide -->
+                            <div class="bg-neutral-800/30 p-6 rounded-xl border border-neutral-800 mb-6">
+                                <h4 class="text-emerald-400 font-bold text-lg mb-3">4. Auto-Filler (자동 입력)</h4>
+                                <div class="space-y-4 text-sm text-neutral-400">
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">필드 및 마커 (Fields & Markers):</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>위치 지정 (Pick):</strong> 사이드바에서 데이터 필드(이름, 날짜 등)나 색상 마커를 선택합니다. "Pick" 버튼을 누른 뒤 PDF 위를 클릭하여 해당 데이터가 표시될 위치를 지정합니다.</li>
+                                            <li><strong>값 수정:</strong> 사이드바에서 텍스트 값을 수정하면 지정된 모든 위치에 일괄 적용됩니다.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">수동 도구 (Manual Tools):</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>상단 툴바를 이용해 <strong>텍스트</strong>, <strong>체크(✓)</strong>, <strong>X표시</strong>를 자유롭게 찍을 수 있습니다.</li>
+                                            <li><strong>지우개 (Eraser):</strong> 흰색 박스를 생성하여 기존 내용을 가릴 수 있습니다.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">적용 및 저장:</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>하단의 "Apply Fields" 또는 "Apply Markers" 버튼을 눌러 자동 입력된 데이터를 활성화합니다.</li>
+                                            <li>"Download PDF"를 누르면 모든 내용이 병합된 새 파일이 저장됩니다.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- File Compressor Guide -->
+                            <div class="bg-neutral-800/30 p-6 rounded-xl border border-neutral-800 mb-6">
+                                <h4 class="text-violet-400 font-bold text-lg mb-3">5. File Compressor (파일 압축)</h4>
+                                <div class="space-y-4 text-sm text-neutral-400">
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">압축 및 리사이징 (Compression):</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li><strong>용량 축소:</strong> PDF 문서 및 이미지(JPG, PNG, WebP)의 파일 크기를 줄여 저장 공간을 아끼거나 업로드 제한을 준수할 수 있습니다.</li>
+                                            <li><strong>이미지 옵션:</strong> 화질(10-90%)을 조정하거나 해상도(예: Full HD 1920px)를 줄여 최적화할 수 있습니다.</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <strong class="text-neutral-200 block mb-1">일괄 처리 (Batch Processing):</strong>
+                                        <ul class="list-disc pl-5 space-y-1">
+                                            <li>여러 파일을 한 번에 드래그하여 동시에 처리할 수 있습니다.</li>
+                                            <li>처리된 파일을 개별적으로 다운로드하거나 ZIP 파일로 한 번에 받을 수 있습니다.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-6 border-t border-neutral-800 flex justify-end bg-neutral-900 rounded-b-2xl">
+                <button onclick="closeGuideModal()" class="px-5 py-2.5 rounded-lg bg-neutral-800 text-white hover:bg-neutral-700 transition-colors text-sm font-medium">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Modal Logic
+        const modal = document.getElementById('compressorModal');
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const downloadAllBtn = document.getElementById('downloadAllBtn');
+        const qualityRange = document.getElementById('qualityRange');
+        const qualityValue = document.getElementById('qualityValue');
+        const maxWidthSelect = document.getElementById('maxWidthSelect');
+
+        // Guide Modal Logic
+        const guideModal = document.getElementById('guideModal');
+
+        function openGuideModal() {
+            guideModal.classList.add('active');
+        }
+
+        function closeGuideModal() {
+            guideModal.classList.remove('active');
+        }
+
+        function switchGuideTab(lang) {
+            const enContent = document.getElementById('guide-content-en');
+            const koContent = document.getElementById('guide-content-ko');
+            const enTab = document.getElementById('tab-en');
+            const koTab = document.getElementById('tab-ko');
+
+            if (lang === 'en') {
+                enContent.classList.remove('hidden');
+                koContent.classList.add('hidden');
+                enTab.classList.add('text-white', 'border-amber-500', 'bg-neutral-800/50');
+                enTab.classList.remove('text-neutral-500', 'border-transparent');
+                koTab.classList.remove('text-white', 'border-amber-500', 'bg-neutral-800/50');
+                koTab.classList.add('text-neutral-500', 'border-transparent');
+            } else {
+                enContent.classList.add('hidden');
+                koContent.classList.remove('hidden');
+                koTab.classList.add('text-white', 'border-amber-500', 'bg-neutral-800/50');
+                koTab.classList.remove('text-neutral-500', 'border-transparent');
+                enTab.classList.remove('text-white', 'border-amber-500', 'bg-neutral-800/50');
+                enTab.classList.add('text-neutral-500', 'border-transparent');
+            }
+        }
+
+        // Store file objects with their state
+        let processedFiles = [];
+
+        function openModal() {
+            modal.classList.add('active');
+            processedFiles = [];
+            updateFileList();
+        }
+
+        function closeModal() {
+            modal.classList.remove('active');
+        }
+
+        // Quality Slider UI
+        qualityRange.addEventListener('input', (e) => {
+            qualityValue.textContent = e.target.value + '%';
+        });
+
+        // Trigger Reprocessing on Settings Change
+        // Using 'change' event to avoid spamming while dragging slider
+        qualityRange.addEventListener('change', () => {
+            reprocessAll();
+        });
+
+        maxWidthSelect.addEventListener('change', () => {
+            reprocessAll();
+        });
+
+        // Drag & Drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-violet-500', 'bg-violet-900/10');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-violet-500', 'bg-violet-900/10');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-violet-500', 'bg-violet-900/10');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        async function handleFiles(files) {
+            fileList.classList.remove('hidden');
+            
+            // Add new files to the list
+            for (let file of files) {
+                const fileId = Date.now() + Math.random().toString(36).substr(2, 9);
+                processedFiles.push({
+                    id: fileId,
+                    originalFile: file, // Keep reference to original for re-processing
+                    name: file.name,
+                    originalSize: formatBytes(file.size),
+                    status: 'pending',
+                    blob: null,
+                    newSize: '...',
+                    reduction: 0
+                });
+            }
+            
+            // Process newly added files (and existing ones if settings changed, but here we just run all)
+            await reprocessAll();
+        }
+
+        async function reprocessAll() {
+            // Update UI to show processing state
+            processedFiles.forEach(item => {
+                if (item.status !== 'error') {
+                    item.status = 'processing';
+                }
+            });
+            updateFileList();
+
+            // Process sequentially to not freeze UI too much
+            for (let item of processedFiles) {
+                if(item.status === 'error') continue;
+                await processItem(item);
+            }
+            
+            updateFileList();
+        }
+
+        async function processItem(item) {
+            const quality = parseInt(qualityRange.value) / 100;
+            const maxWidth = parseInt(maxWidthSelect.value);
+            const file = item.originalFile;
+            
+            let resultBlob;
+            let type = file.type;
+
+            try {
+                if (type.startsWith('image/')) {
+                    // Image Compression
+                    resultBlob = await compressImage(file, quality, maxWidth, type);
+                } else if (type === 'application/pdf') {
+                    // PDF Optimization
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+                    const pdfBytes = await pdfDoc.save(); 
+                    resultBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+                } else {
+                    // Pass through unsupported but valid files if any, or throw
+                    // For now, assume logic only allows supported types or we just copy it
+                     resultBlob = file; 
+                }
+
+                item.blob = resultBlob;
+                item.newSize = formatBytes(resultBlob.size);
+                item.status = 'done';
+                // Calculate reduction
+                if (file.size > 0) {
+                    item.reduction = Math.round(((file.size - resultBlob.size) / file.size) * 100);
+                } else {
+                    item.reduction = 0;
+                }
+
+            } catch (err) {
+                console.error(err);
+                item.status = 'error';
+            }
+        }
+
+        function compressImage(file, quality, maxWidth, type) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = URL.createObjectURL(file);
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    
+                    let width = img.width;
+                    let height = img.height;
+
+                    // Resize logic
+                    if (maxWidth > 0 && width > maxWidth) {
+                        const scaleFactor = maxWidth / width;
+                        width = maxWidth;
+                        height = height * scaleFactor;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // ToBlob handles compression (quality adjustment)
+                    // If file is png, quality might not affect much unless format is changed to jpeg/webp
+                    // Browser support for quality in toBlob varies for PNG, typically ignored.
+                    // If user uploads PNG, maybe we should optionally convert to JPEG if they want high compression?
+                    // For this request, we keep original type to respect transparency etc, but note limitation.
+                    
+                    canvas.toBlob((blob) => {
+                        resolve(blob);
+                    }, type, quality); 
+                };
+                img.onerror = reject;
+            });
+        }
+
+        function updateFileList() {
+            fileList.innerHTML = '';
+            let hasSuccess = false;
+
+            processedFiles.forEach(file => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between p-3 bg-neutral-900 rounded-lg border border-neutral-800';
+                
+                let statusHtml = '';
+                if (file.status === 'pending') {
+                     statusHtml = `<span class="text-neutral-500 text-xs font-bold">WAITING...</span>`;
+                } else if (file.status === 'processing') {
+                    statusHtml = `<span class="text-yellow-500 text-xs font-bold animate-pulse">PROCESSING...</span>`;
+                } else if (file.status === 'error') {
+                    statusHtml = `<span class="text-red-500 text-xs font-bold">FAILED</span>`;
+                } else {
+                    hasSuccess = true;
+                    // Determine reduction color
+                    const isReduction = file.reduction > 0;
+                    const reductionClass = isReduction ? 'text-green-500' : 'text-neutral-500';
+                    const reductionText = isReduction ? `-${file.reduction}%` : '0%';
+                    
+                    statusHtml = `
+                        <div class="text-right">
+                            <div class="text-xs text-neutral-500 line-through">${file.originalSize}</div>
+                            <div class="text-sm font-bold text-white">${file.newSize} <span class="${reductionClass}">(${reductionText})</span></div>
+                        </div>
+                        <button onclick="downloadSingle('${file.id}')" class="ml-4 w-8 h-8 flex items-center justify-center bg-neutral-800 hover:bg-violet-600 text-neutral-400 hover:text-white rounded-full transition-colors">
+                            <i class="fas fa-download text-xs"></i>
+                        </button>
+                    `;
+                }
+
+                div.innerHTML = `
+                    <div class="flex items-center space-x-3 overflow-hidden">
+                        <div class="w-8 h-8 bg-neutral-800 rounded flex items-center justify-center flex-shrink-0">
+                            <i class="fas ${file.name.endsWith('pdf') ? 'fa-file-pdf text-red-400' : 'fa-file-image text-blue-400'}"></i>
+                        </div>
+                        <span class="text-sm text-neutral-300 truncate max-w-[150px] md:max-w-[200px]">${file.name}</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        ${statusHtml}
+                    </div>
+                `;
+                fileList.appendChild(div);
+            });
+
+            // Update main download button
+            if (hasSuccess) {
+                downloadAllBtn.disabled = false;
+                downloadAllBtn.classList.remove('bg-neutral-800', 'text-neutral-500', 'cursor-not-allowed');
+                downloadAllBtn.classList.add('bg-violet-600', 'text-white', 'hover:bg-violet-700');
+                if (processedFiles.filter(f => f.status === 'done').length > 1) {
+                     downloadAllBtn.innerHTML = '<i class="fas fa-file-zipper mr-2"></i> Download All (.zip)';
+                } else {
+                     downloadAllBtn.innerHTML = '<i class="fas fa-download mr-2"></i> Download File';
+                }
+            } else {
+                downloadAllBtn.disabled = true;
+                downloadAllBtn.classList.add('bg-neutral-800', 'text-neutral-500', 'cursor-not-allowed');
+                downloadAllBtn.classList.remove('bg-violet-600', 'text-white', 'hover:bg-violet-700');
+            }
+        }
+
+        function downloadSingle(id) {
+            const file = processedFiles.find(f => f.id === id);
+            if (file && file.blob) {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(file.blob);
+                link.download = "min_" + file.name;
+                link.click();
+            }
+        }
+
+        function downloadAll() {
+            const successFiles = processedFiles.filter(f => f.status === 'done');
+            if (successFiles.length === 0) return;
+
+            // If only 1 file, download directly
+            if (successFiles.length === 1) {
+                downloadSingle(successFiles[0].id);
+                return;
+            }
+
+            // If multiple, use JSZip
+            const zip = new JSZip();
+            successFiles.forEach(file => {
+                zip.file("min_" + file.name, file.blob);
+            });
+
+            zip.generateAsync({type:"blob"}).then(function(content) {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = "compressed_files.zip";
+                link.click();
+            });
+        }
+
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+    </script>
+</body>
+</html>
