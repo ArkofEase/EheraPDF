@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORGANIZER & ADITOR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { user-select: none; -webkit-user-select: none; overflow: hidden; font-family: 'Inter', sans-serif; height: 100vh; margin: 0; background: #f8fafc; }
+        #pages-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--card-width, 400px), 1fr)); gap: 2.5rem; width: 100%; align-items: start; }
+        .page-card { transition: all 0.2s; cursor: grab; background: white; border-radius: 1rem; border: 3px solid white; position: relative; }
+        .page-card.selected { border-color: #3b82f6; ring: 4px solid rgba(59, 130, 246, 0.1); }
+        .dragging { opacity: 0.3; transform: scale(0.9); }
+        .drop-guide-left { border-left: 8px solid #3b82f6 !important; transform: translateX(-4px); }
+        .drop-guide-right { border-right: 8px solid #3b82f6 !important; transform: translateX(4px); }
+        
+        .draggable-item { position: absolute; cursor: move; border: 1px solid transparent; box-sizing: border-box; }
+        .draggable-item.active { border: 2px solid #2563eb; background: rgba(37, 99, 235, 0.05); z-index: 100; }
+        .direct-edit { width: 100%; height: 100%; background: transparent; border: none; outline: none; resize: none; overflow: hidden; font-family: sans-serif; line-height: 1.2; z-index: 25; font-weight: bold; }
+        
+        /* 핸들 디자인 (선택 시에만 노출) */
+        .resize-handle { width: 16px; height: 16px; background: #2563eb; position: absolute; border-radius: 50%; border: 3px solid white; display: none; z-index: 200; cursor: se-resize; bottom: -8px; right: -8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .delete-btn { position: absolute; top: -12px; right: -12px; width: 24px; height: 24px; background: #ef4444; color: white; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; border: 2px solid white; z-index: 210; }
+        .draggable-item.active .resize-handle, .draggable-item.active .delete-btn { display: flex; }
+        
+        .drawing-guide { position: absolute; border: 2px dashed #3b82f6; background: rgba(59, 130, 246, 0.1); pointer-events: none; z-index: 50; }
+        #toast { position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 0.8rem 2rem; border-radius: 99px; opacity: 0; transition: 0.3s; z-index: 10000; font-weight: bold; }
+        .preset-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #ddd; font-size: 11px; font-weight: bold; display: flex; align-items: center; justify-content: center; background: white; transition: all 0.2s; }
+        .preset-btn.active { border-color: #3b82f6; ring: 2px solid #3b82f6; }
+        
+        /* 스크롤바 커스텀 */
+        #sub-toolbar::-webkit-scrollbar { height: 4px; }
+        #sub-toolbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+        /* Drag Selection Marquee */
+        #selection-marquee {
+            position: fixed;
+            border: 1px solid #3b82f6;
+            background-color: rgba(59, 130, 246, 0.2);
+            z-index: 9999;
+            pointer-events: none;
+            display: none;
+        }
+        /* Visual cue for drag selection candidates */
+        .page-card.drag-selecting {
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5);
+        }
+
+        /* Tool Modal Selection Box */
+        .selection-box {
+            position: absolute;
+            border: 2px dashed #ef4444;
+            background-color: rgba(239, 68, 68, 0.2);
+            z-index: 50;
+            pointer-events: none;
+        }
+
+        /* Signature List */
+        .sig-item { border: 2px solid transparent; border-radius: 6px; cursor: pointer; transition: all 0.2s; opacity: 0.7; }
+        .sig-item:hover { opacity: 1; border-color: #cbd5e1; }
+        .sig-item.active { border-color: #3b82f6; opacity: 1; ring: 2px solid #3b82f6; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/"
+  }
+}
+</script>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+
+    <header class="bg-[#0f172a] text-white px-8 py-4 flex justify-between items-center shadow-xl z-50 shrink-0">
+        <div class="flex items-center gap-6">
+            <div class="w-12 h-12 bg-[#2c1a12] rounded-xl flex items-center justify-center shadow-inner border border-white/10 shrink-0">
+                <i class="fas fa-layer-group text-orange-500 text-2xl"></i>
+            </div>
+            <div>
+                <h1 class="font-black tracking-tighter text-3xl uppercase font-sans leading-none">ORGANIZER & ADITOR</h1>
+                <p class="text-[10px] font-bold text-slate-400 tracking-[0.3em] mt-1">PDF PAGE MANAGER & EDITOR</p>
+            </div>
+            <div class="flex items-center gap-3 ml-4 border-l border-slate-700 pl-6">
+                 <a href="vip_Ehera_PDF.html" class="flex items-center justify-center w-10 h-10 rounded-lg bg-[#1e293b] hover:bg-[#334155] border border-slate-700 transition-all text-slate-200 group shadow-md" title="Go Home">
+                    <i class="fas fa-home group-hover:text-blue-400"></i>
+                </a>
+                <button onclick="undo()" id="btn-undo" class="flex items-center gap-2 bg-[#1e293b] hover:bg-[#334155] px-4 py-2 h-10 rounded-lg border border-slate-700 transition-all text-sm font-bold text-slate-200 opacity-50 cursor-not-allowed shadow-md">
+                    <i class="fas fa-undo text-slate-400 text-xs"></i> Undo
+                </button>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <input type="file" id="pdf-upload" multiple class="hidden" accept="application/pdf,image/*">
+            <label for="pdf-upload" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-full font-black text-xs uppercase cursor-pointer transition-all shadow-lg active:scale-95">Import Files</label>
+            <button onclick="saveToPdf()" id="btn-save-pdf" class="hidden bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-full font-black text-xs uppercase transition-all shadow-lg">Export PDF</button>
+        </div>
+    </header>
+
+    <div id="sub-toolbar" class="hidden bg-slate-50 border-b h-16 px-6 flex items-center justify-start shadow-sm z-40 select-none overflow-x-auto min-w-full shrink-0">
+        <div class="flex items-center gap-8 min-w-max">
+            
+            <div class="flex items-center gap-3 h-10 border-r-2 border-slate-200 pr-8 shrink-0">
+                <div class="flex items-center gap-2 cursor-pointer group" onclick="toggleSelectAll()">
+                    <div id="select-all-checkbox" class="w-5 h-5 border-2 border-slate-300 rounded flex items-center justify-center transition-all bg-white shrink-0">
+                        <i class="fas fa-check text-white text-xs opacity-0"></i>
+                    </div>
+                    <span class="font-black text-slate-800 text-xs tracking-widest group-hover:text-slate-600 uppercase whitespace-nowrap">Select All</span>
+                </div>
+                <div class="bg-blue-600 text-white font-bold text-[10px] w-6 h-6 rounded-full flex items-center justify-center shadow-sm shrink-0" id="selection-count">0</div>
+            </div>
+
+            <div class="flex items-center gap-2 h-10 border-r-2 border-slate-200 pr-8 shrink-0">
+                <span class="font-black text-slate-400 text-[11px] tracking-widest uppercase whitespace-nowrap">Go to</span>
+                <div class="relative shrink-0 flex-none">
+                    <input type="number" id="goto-input" class="w-[60px] h-9 bg-slate-700 border-none rounded-lg text-center text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none text-white placeholder-slate-400 flex-none" placeholder="#">
+                </div>
+                <button onclick="goToPage()" class="w-9 h-9 border border-slate-300 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-blue-600 transition-colors bg-white shadow-sm shrink-0 flex-none">
+                    <i class="fas fa-arrow-right text-xs"></i>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-4 h-10 border-r-2 border-slate-200 pr-8 shrink-0">
+                <span class="font-black text-slate-400 text-[11px] tracking-widest uppercase whitespace-nowrap">Zoom</span>
+                <input type="range" id="zoom-slider" min="150" max="1000" value="400" class="w-32 h-1.5 bg-slate-200 rounded-lg accent-blue-600 cursor-pointer hover:accent-blue-500 shrink-0">
+            </div>
+
+            <div class="flex items-center gap-4 h-10 border-r-2 border-slate-200 pr-8 shrink-0">
+                <button onclick="openCropModal()" class="flex items-center gap-2 text-slate-700 hover:text-orange-500 transition-colors group shrink-0">
+                    <i class="fas fa-crop-alt text-orange-500 text-sm group-hover:scale-110 transition-transform"></i>
+                    <span class="font-black text-[11px] tracking-widest uppercase whitespace-nowrap">Crop</span>
+                </button>
+                 <button onclick="openEraseModal()" class="flex items-center gap-2 text-slate-700 hover:text-red-500 transition-colors group shrink-0">
+                    <i class="fas fa-eraser text-red-500 text-sm group-hover:scale-110 transition-transform"></i>
+                    <span class="font-black text-[11px] tracking-widest uppercase whitespace-nowrap">Erase</span>
+                </button>
+                <button onclick="togglePasteMode()" id="btn-toolbar-paste" class="flex items-center gap-2 text-slate-400 transition-colors group opacity-50 cursor-not-allowed shrink-0">
+                    <i class="fas fa-paste text-sm group-hover:scale-110 transition-transform"></i>
+                    <span class="font-black text-[11px] tracking-widest uppercase whitespace-nowrap">Paste</span>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-3 shrink-0">
+                <button onclick="addBlankPage()" class="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-full hover:border-blue-500 hover:text-blue-600 text-slate-700 transition-all shadow-sm shrink-0">
+                    <i class="fas fa-plus-circle text-blue-500"></i>
+                    <span class="font-black text-[10px] tracking-widest uppercase whitespace-nowrap">Blank</span>
+                </button>
+                <button onclick="duplicateSelected()" class="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-full hover:border-emerald-500 hover:text-emerald-600 text-slate-700 transition-all shadow-sm shrink-0">
+                    <i class="fas fa-clone text-emerald-500"></i>
+                    <span class="font-black text-[10px] tracking-widest uppercase whitespace-nowrap">Duplicate</span>
+                </button>
+                 <button onclick="rotateSelected(90)" class="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-full hover:border-slate-800 hover:text-slate-900 text-slate-700 transition-all shadow-sm shrink-0">
+                    <i class="fas fa-sync-alt text-slate-600"></i>
+                    <span class="font-black text-[10px] tracking-widest uppercase whitespace-nowrap">Rotate</span>
+                </button>
+                <div class="w-px h-6 bg-slate-300 mx-2 shrink-0"></div>
+                <button onclick="deleteSelected()" class="flex items-center gap-2 px-5 py-2 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-all active:scale-95 shrink-0">
+                    <i class="fas fa-trash-alt"></i>
+                    <span class="font-black text-[10px] tracking-widest uppercase whitespace-nowrap">Delete</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <main id="main-container" class="flex-grow overflow-auto p-12 bg-slate-100 relative">
+        <div id="pages-container" class="hidden pb-48"></div>
+        <div id="empty-state" class="h-full flex flex-col items-center justify-center text-slate-300 uppercase font-black tracking-widest opacity-40 text-2xl text-center">Drag Files Here<br><span class="text-sm font-bold opacity-50 mt-4 italic">Images will fit to A4 ($1240 \times 1754$)</span></div>
+    </main>
+    
+    <div id="selection-marquee"></div>
+
+    <!-- Import Options Modal -->
+    <div id="import-modal" class="hidden fixed inset-0 bg-slate-900/50 z-[400] flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center transform transition-all scale-100">
+            <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
+                <i class="fas fa-images"></i>
+            </div>
+            <h3 class="text-xl font-black text-slate-800 mb-2 uppercase tracking-wide">Import Images</h3>
+            <p class="text-slate-500 text-sm font-medium mb-8">How should we handle the image dimensions?</p>
+            <div class="flex flex-col gap-3">
+                <button onclick="confirmImport('fit')" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg shadow-blue-200 transition-all">Fit to A4 Page</button>
+                <button onclick="confirmImport('original')" class="w-full py-3 bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200 rounded-xl font-bold uppercase text-xs tracking-widest transition-all">Keep Original Size</button>
+            </div>
+            <button onclick="closeImportModal()" class="mt-6 text-slate-400 text-xs font-bold hover:text-slate-600 uppercase tracking-widest">Cancel</button>
+        </div>
+    </div>
+
+    <div id="editor-modal" class="hidden fixed inset-0 z-[100] bg-slate-200 flex flex-col">
+        <div class="bg-white px-8 py-3 border-b flex justify-between items-center shadow-md">
+            <div class="flex items-center gap-6">
+                <button onclick="closeEditor()" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-black"><i class="fas fa-times text-2xl"></i></button>
+                <div class="flex bg-slate-100 rounded-xl p-1 items-center border">
+                    <button onclick="navigateEditor(-1)" class="w-10 py-1 hover:bg-white rounded text-slate-500"><i class="fas fa-chevron-left"></i></button>
+                    <span id="editor-page-idx" class="px-4 font-black text-[10px] text-slate-400 uppercase tracking-widest">Page 1</span>
+                    <button onclick="navigateEditor(1)" class="w-10 py-1 hover:bg-white rounded text-slate-500"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+
+            <div id="editor-controls" class="flex items-center gap-4">
+                <div id="text-presets" class="hidden flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border">
+                    <div class="flex gap-2 items-center px-2">
+                        <span class="text-[10px] font-black text-slate-300 uppercase">Size</span>
+                        <input type="number" id="text-size-input" value="24" min="10" max="200" onchange="updateTextSize(this.value)" class="w-16 px-2 py-1 text-xs font-bold border rounded-lg text-center outline-none focus:border-blue-500 bg-slate-50">
+                    </div>
+                    <div class="w-px h-4 bg-slate-200 mx-1"></div>
+                    <div class="flex gap-1">
+                        <button onclick="setSimplePreset('color', '#000000')" class="w-7 h-7 rounded-full bg-black border-2 border-white ring-2 ring-blue-500" id="pcolor-#000000"></button>
+                        <button onclick="setSimplePreset('color', '#FF0000')" class="w-7 h-7 rounded-full bg-red-600 border-2 border-white" id="pcolor-#FF0000"></button>
+                        <button onclick="setSimplePreset('color', '#0000FF')" class="w-7 h-7 rounded-full bg-blue-600 border-2 border-white" id="pcolor-#0000FF"></button>
+                        <button onclick="setSimplePreset('color', '#008000')" class="w-7 h-7 rounded-full bg-green-600 border-2 border-white" id="pcolor-#008000"></button>
+                    </div>
+                </div>
+                <div id="box-presets" class="hidden flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border">
+                    <div class="flex gap-1">
+                        <button onclick="setSimplePreset('thick', 2)" id="pthick-2" class="preset-btn">Thin</button>
+                        <button onclick="setSimplePreset('thick', 6)" id="pthick-6" class="preset-btn active">Mid</button>
+                        <button onclick="setSimplePreset('thick', 12)" id="pthick-12" class="preset-btn">Thick</button>
+                    </div>
+                    <div class="w-px h-4 bg-slate-200 mx-1"></div>
+                    <div class="flex gap-1">
+                        <button onclick="setSimplePreset('color', '#000000')" class="w-7 h-7 rounded-full bg-black border-2 border-white" id="pbcolor-#000000"></button>
+                        <button onclick="setSimplePreset('color', '#FF0000')" class="w-7 h-7 rounded-full bg-red-600 border-2 border-white" id="pbcolor-#FF0000"></button>
+                        <button onclick="setSimplePreset('color', '#0000FF')" class="w-7 h-7 rounded-full bg-blue-600 border-2 border-white" id="pbcolor-#0000FF"></button>
+                        <button onclick="setSimplePreset('color', '#008000')" class="w-7 h-7 rounded-full bg-green-600 border-2 border-white" id="pbcolor-#008000"></button>
+                    </div>
+                </div>
+                <div id="signature-presets" class="hidden flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border">
+                    <div class="flex items-center gap-2 px-2">
+                        <span class="text-[10px] font-black text-slate-300 uppercase">Saved</span>
+                        <div id="signature-list" class="flex items-center gap-2 max-w-[200px] overflow-x-auto p-1 bg-slate-100 rounded inner-shadow h-10">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    <button onclick="openSignatureModal()" class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 shadow-sm"><i class="fas fa-plus text-xs"></i></button>
+                </div>
+                <button onclick="closeEditor()" class="bg-blue-600 hover:bg-blue-700 text-white px-10 py-2 rounded-full font-black text-xs uppercase shadow-lg">Finish</button>
+            </div>
+        </div>
+
+        <div class="flex-grow flex overflow-hidden">
+            <div class="w-24 bg-white border-r flex flex-col items-center py-8 gap-6 shadow-sm z-20 overflow-y-auto">
+                <button onclick="setTool('select')" id="tool-select" class="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 ring-2 ring-blue-500 flex items-center justify-center transition-all shadow-sm shrink-0"><i class="fas fa-mouse-pointer text-xl"></i></button>
+                <button onclick="setTool('text')" id="tool-text" class="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-blue-50 hover:text-blue-600 transition-all shrink-0"><i class="fas fa-font text-xl"></i></button>
+                <button onclick="setTool('highlight')" id="tool-highlight" class="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-yellow-50 hover:text-yellow-500 transition-all shrink-0"><i class="fas fa-highlighter text-xl"></i></button>
+                <button onclick="setTool('box')" id="tool-box" class="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all shrink-0"><i class="far fa-square text-xl"></i></button>
+                <button onclick="setTool('whiteout')" id="tool-whiteout" class="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-slate-200 hover:text-slate-600 transition-all shrink-0"><i class="fas fa-eraser text-xl"></i></button>
+                <div class="w-8 h-px bg-slate-200 shrink-0"></div>
+                <button onclick="setTool('check')" id="tool-check" class="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-green-50 hover:text-green-600 transition-all shrink-0"><i class="fas fa-check text-xl"></i></button>
+                <button onclick="setTool('x')" id="tool-x" class="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition-all shrink-0"><i class="fas fa-times text-xl"></i></button>
+                <div class="w-8 h-px bg-slate-200 shrink-0"></div>
+                <button onclick="setTool('sign')" id="tool-sign" class="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-purple-50 hover:text-purple-600 transition-all shrink-0"><i class="fas fa-signature text-xl"></i></button>
+            </div>
+            
+            <div class="flex-grow overflow-auto p-4 flex justify-center items-start bg-slate-200" id="editor-viewport">
+                <div id="editor-container" class="bg-white shadow-2xl relative cursor-crosshair">
+                    <img id="editor-base-img" class="pointer-events-none select-none max-w-full">
+                    <div id="drawing-guide" class="drawing-guide hidden"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tool-modal" class="hidden fixed inset-0 bg-slate-900/95 z-[200] flex flex-col p-12">
+        <div class="flex justify-between items-center text-white mb-6 font-black uppercase tracking-widest"><span>Select Area</span><button onclick="closeToolModal()" class="text-4xl hover:text-red-500">&times;</button></div>
+        <div class="flex-grow overflow-auto flex justify-center items-center"><div id="tool-wrap" class="relative bg-white shadow-2xl"><img id="tool-img" draggable="false" class="max-h-[75vh]"><div id="selection-box" class="selection-box"></div></div></div>
+        <div class="flex justify-center mt-10"><button id="tool-confirm-btn" class="bg-white text-slate-900 px-16 py-4 rounded-full font-black text-lg uppercase shadow-2xl hover:scale-105 active:scale-95 transition-all">Confirm Selection</button></div>
+    </div>
+
+    <div id="signature-modal" class="hidden fixed inset-0 bg-black/80 z-[300] flex items-center justify-center">
+        <div class="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl text-center">
+            <h3 class="font-black uppercase mb-6 text-slate-800">Signature</h3>
+            <div class="border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50 mb-6 h-48 relative overflow-hidden"><canvas id="sig-canvas" class="w-full h-full cursor-crosshair"></canvas></div>
+            <div class="flex gap-4 mb-4">
+                 <input type="file" id="sig-upload-input" accept="image/*" class="hidden" onchange="handleSignatureUpload(this)">
+                <button onclick="document.getElementById('sig-upload-input').click()" class="flex-1 py-3 bg-blue-50 text-blue-600 rounded-xl font-bold uppercase text-xs">Upload Image</button>
+            </div>
+            <div class="flex gap-4">
+                <button onclick="clearSignature()" class="flex-1 py-3 bg-slate-100 rounded-xl font-bold uppercase text-xs">Reset</button>
+                <button onclick="saveSignature()" class="flex-1 py-3 bg-purple-600 text-white rounded-xl font-bold uppercase text-xs shadow-lg">Save & Use</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+        let pagesData = []; let selectedIds = new Set(); let appClipboard = null; 
+        let activePageId = null; let draggedPageId = null; let currentTool = 'select';
+        let curSize = 24; let curColor = '#000000'; let curThick = 6;
+        let startX, startY; let compAct = null; let activeDraggable = null; let isDrawing = false;
+        let historyStack = [];
+        let isPasteMode = false;
+        let currentModalMode = 'crop'; // 'crop' or 'erase'
+        
+        let pendingImportFiles = null;
+        let pendingImportIdx = null;
+        let lastDragTarget = null;
+        
+        // Drag Selection Variables
+        let isDragSelecting = false;
+        let selectionStartPoint = null;
+
+        // Signature
+        let savedSignatures = []; // Array of dataURLs
+        let activeSignatureIndex = -1; 
+
+        // --- Undo System ---
+        const saveState = () => {
+            if (historyStack.length > 20) historyStack.shift();
+            historyStack.push(JSON.parse(JSON.stringify(pagesData)));
+            updateUndoBtn();
+        };
+
+        const undo = () => {
+            if (historyStack.length === 0) return;
+            pagesData = historyStack.pop();
+            selectedIds.clear();
+            renderPages();
+            updateUndoBtn();
+        };
+
+        const updateUndoBtn = () => {
+            const btn = document.getElementById('btn-undo');
+            if (!btn) return;
+            if (historyStack.length > 0) {
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                btn.querySelector('i').className = "fas fa-undo text-blue-400 text-xs";
+            } else {
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+                btn.querySelector('i').className = "fas fa-undo text-slate-400 text-xs";
+            }
+        };
+
+        // --- File System ---
+        window.addEventListener('dragover', e => e.preventDefault());
+        window.addEventListener('drop', async e => {
+            e.preventDefault(); 
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                saveState(); // Save before import
+                const targetCard = e.target.closest('.page-card');
+                let insertIdx = pagesData.length;
+                if(targetCard) {
+                    const rect = targetCard.getBoundingClientRect();
+                    insertIdx = pagesData.findIndex(p => p.id === targetCard.dataset.id);
+                    if(e.clientX > rect.left + rect.width/2) insertIdx++;
+                }
+                await handleFiles(files, insertIdx);
+            }
+        });
+
+        document.getElementById('pdf-upload').addEventListener('change', e => {
+            if(e.target.files.length) {
+                saveState(); // Save before import
+                handleFiles(e.target.files);
+            }
+        });
+
+        async function handleFiles(files, insertIdx = null) {
+            // Check if any files are images. If so, show modal.
+            let hasImages = false;
+            for(let f of files) { if(f.type.startsWith('image/')) { hasImages = true; break; } }
+            
+            if(hasImages) {
+                pendingImportFiles = files;
+                pendingImportIdx = insertIdx;
+                document.getElementById('import-modal').classList.remove('hidden');
+            } else {
+                // Just PDFs, proceed with default (original size logic)
+                processImportFiles(files, insertIdx, 'original');
+            }
+        }
+        
+        function confirmImport(mode) {
+            document.getElementById('import-modal').classList.add('hidden');
+            if(pendingImportFiles) {
+                processImportFiles(pendingImportFiles, pendingImportIdx, mode);
+                pendingImportFiles = null;
+                pendingImportIdx = null;
+            }
+        }
+        
+        function closeImportModal() {
+            document.getElementById('import-modal').classList.add('hidden');
+            pendingImportFiles = null;
+            pendingImportIdx = null;
+        }
+
+        async function processImportFiles(files, insertIdx, importMode) {
+            const newPages = [];
+            
+            for (let file of files) {
+                if (file.type.startsWith('image/')) {
+                    const dataUrl = await new Promise(r => { const rd = new FileReader(); rd.onload = ev => r(ev.target.result); rd.readAsDataURL(file); });
+                    const img = await loadImage(dataUrl);
+                    
+                    const canvas = document.createElement('canvas'); 
+                    const ctx = canvas.getContext('2d');
+                    let w, h;
+                    
+                    if (importMode === 'original') {
+                        w = img.width; h = img.height;
+                        canvas.width = w; 
+                        canvas.height = h;
+                        ctx.fillStyle = 'white'; 
+                        ctx.fillRect(0,0,w,h);
+                        ctx.drawImage(img, 0, 0);
+                    } else {
+                        // Fit to A4 logic
+                        w = 1240; h = 1754;
+                        canvas.width = w; 
+                        canvas.height = h; 
+                        ctx.fillStyle = 'white'; 
+                        ctx.fillRect(0,0,w,h);
+                        const ratio = Math.min(1140/img.width, 1654/img.height);
+                        ctx.drawImage(img, (1240-img.width*ratio)/2, (1754-img.height*ratio)/2, img.width*ratio, img.height*ratio);
+                    }
+                    
+                    newPages.push({ 
+                        id: Math.random().toString(36).substr(2,9), 
+                        baseDataUrl: canvas.toDataURL(), 
+                        objects: [], 
+                        erasures: [], 
+                        rotation: 0,
+                        width: w,
+                        height: h
+                    });
+                } else if (file.type === 'application/pdf') {
+                    const pdf = await pdfjsLib.getDocument(await file.arrayBuffer()).promise;
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i); const vp = page.getViewport({ scale: 2.0 });
+                        const canvas = document.createElement('canvas'); canvas.width = vp.width; canvas.height = vp.height;
+                        await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+                        newPages.push({ 
+                            id: Math.random().toString(36).substr(2,9), 
+                            baseDataUrl: canvas.toDataURL(), 
+                            objects: [], 
+                            erasures: [], 
+                            rotation: 0,
+                            width: vp.width,
+                            height: vp.height
+                        });
+                    }
+                }
+            }
+            if(insertIdx !== null) pagesData.splice(insertIdx, 0, ...newPages);
+            else pagesData.push(...newPages);
+            renderPages();
+        }
+        const loadImage = (u) => new Promise(r => { const img = new Image(); img.onload = () => r(img); img.src = u; });
+
+        // --- Drag Selection Logic ---
+        const mainContainer = document.getElementById('main-container');
+        
+        mainContainer.addEventListener('mousedown', (e) => {
+            // Ignore if clicking on a page-card (handled by drag drop or click selection) or if right click
+            if (e.target.closest('.page-card') || e.button !== 0 || isPasteMode) return;
+            
+            isDragSelecting = true;
+            selectionStartPoint = { x: e.clientX, y: e.clientY };
+            
+            const marquee = document.getElementById('selection-marquee');
+            marquee.style.display = 'block';
+            marquee.style.left = e.clientX + 'px';
+            marquee.style.top = e.clientY + 'px';
+            marquee.style.width = '0px';
+            marquee.style.height = '0px';
+            
+            // If not holding shift/ctrl, clear previous selection
+            if (!e.shiftKey && !e.ctrlKey) {
+                selectedIds.clear();
+                // We update visuals manually during drag for performance, but clear here to start fresh
+                document.querySelectorAll('.page-card').forEach(c => c.classList.remove('selected'));
+                updateToolbarState(); // Update text count
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragSelecting) return;
+            
+            const marquee = document.getElementById('selection-marquee');
+            const currentX = e.clientX;
+            const currentY = e.clientY;
+            
+            const x = Math.min(selectionStartPoint.x, currentX);
+            const y = Math.min(selectionStartPoint.y, currentY);
+            const w = Math.abs(selectionStartPoint.x - currentX);
+            const h = Math.abs(selectionStartPoint.y - currentY);
+            
+            marquee.style.left = x + 'px';
+            marquee.style.top = y + 'px';
+            marquee.style.width = w + 'px';
+            marquee.style.height = h + 'px';
+            
+            // Check intersection with cards
+            const marqueeRect = marquee.getBoundingClientRect();
+            document.querySelectorAll('.page-card').forEach(card => {
+                const cardRect = card.getBoundingClientRect();
+                const isIntersecting = !(cardRect.right < marqueeRect.left || 
+                                       cardRect.left > marqueeRect.right || 
+                                       cardRect.bottom < marqueeRect.top || 
+                                       cardRect.top > marqueeRect.bottom);
+                
+                if (isIntersecting) {
+                    card.classList.add('drag-selecting');
+                } else {
+                    card.classList.remove('drag-selecting');
+                }
+            });
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (!isDragSelecting) return;
+            isDragSelecting = false;
+            
+            const marquee = document.getElementById('selection-marquee');
+            marquee.style.display = 'none';
+            
+            // Commit drag selection
+            document.querySelectorAll('.page-card.drag-selecting').forEach(card => {
+                selectedIds.add(card.dataset.id);
+                card.classList.remove('drag-selecting');
+            });
+            
+            renderPages(); // Finalize visual state
+        });
+
+
+        // --- Toolbar Functions ---
+        const toggleSelectAll = () => {
+            if (selectedIds.size === pagesData.length && pagesData.length > 0) {
+                selectedIds.clear();
+            } else {
+                pagesData.forEach(p => selectedIds.add(p.id));
+            }
+            renderPages();
+        };
+
+        const goToPage = () => {
+            const input = document.getElementById('goto-input');
+            const pageNum = parseInt(input.value);
+            if (pageNum >= 1 && pageNum <= pagesData.length) {
+                const container = document.getElementById('pages-container');
+                const card = container.children[pageNum - 1];
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                selectedIds.clear();
+                selectedIds.add(pagesData[pageNum-1].id);
+                renderPages();
+            } else {
+                showToast('Invalid page number');
+            }
+        };
+
+        const updateToolbarState = () => {
+            document.getElementById('selection-count').innerText = selectedIds.size;
+            const cb = document.getElementById('select-all-checkbox');
+            const icon = cb.querySelector('i');
+            if (pagesData.length > 0 && selectedIds.size === pagesData.length) {
+                cb.classList.remove('border-slate-300');
+                cb.classList.add('bg-blue-600', 'border-blue-600');
+                icon.classList.remove('opacity-0');
+            } else {
+                cb.classList.add('border-slate-300');
+                cb.classList.remove('bg-blue-600', 'border-blue-600');
+                icon.classList.add('opacity-0');
+            }
+
+            const pasteBtn = document.getElementById('btn-toolbar-paste');
+            if (appClipboard) {
+                pasteBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                pasteBtn.classList.add('text-slate-700', 'hover:text-blue-600');
+                pasteBtn.classList.remove('text-slate-400');
+                if (isPasteMode) {
+                      pasteBtn.classList.add('text-blue-600');
+                }
+            } else {
+                pasteBtn.classList.add('opacity-50', 'cursor-not-allowed', 'text-slate-400');
+                pasteBtn.classList.remove('text-slate-700', 'hover:text-blue-600', 'text-blue-600');
+            }
+        };
+
+        const togglePasteMode = () => {
+            if (!appClipboard) return showToast('Clipboard empty. Crop something first.');
+            isPasteMode = !isPasteMode;
+            updateToolbarState();
+            document.body.style.cursor = isPasteMode ? 'copy' : 'default';
+            if (isPasteMode) showToast('Select a page to paste');
+        };
+
+        const pasteToPage = (pageId) => {
+            if (!appClipboard) return;
+            saveState();
+            const p = pagesData.find(x => x.id === pageId);
+            p.objects.push({
+                type: 'image',
+                dataUrl: appClipboard.dataUrl,
+                x: 0.1, y: 0.1,
+                w: appClipboard.w, h: appClipboard.h,
+                fontSize: 24, color: '#000000'
+            });
+            isPasteMode = false;
+            document.body.style.cursor = 'default';
+            renderPages();
+            showToast('Pasted to Page ' + (pagesData.indexOf(p) + 1));
+        };
+
+        // --- Organizer ---
+        const renderPages = () => {
+            updateToolbarState();
+            const container = document.getElementById('pages-container'); container.innerHTML = '';
+            const hasData = pagesData.length > 0;
+            document.getElementById('empty-state').classList.toggle('hidden', hasData);
+            document.getElementById('pages-container').classList.toggle('hidden', !hasData);
+            document.getElementById('btn-save-pdf').classList.toggle('hidden', !hasData);
+            document.getElementById('sub-toolbar').classList.toggle('hidden', !hasData);
+
+            pagesData.forEach((p, i) => {
+                const card = document.createElement('div');
+                card.className = `page-card p-4 ${selectedIds.has(p.id) ? 'selected' : ''}`;
+                card.draggable = true; card.dataset.id = p.id;
+                
+                // Rotation logic: Aspect ratio is simply derived from current W/H (which we now swap)
+                const ratio = (p.height && p.width) ? (p.height / p.width) : 1.414;
+                
+                card.innerHTML = `
+                    <div class="flex justify-between items-center mb-2 px-1">
+                        <div class="flex gap-2">
+                             <button onclick="event.stopPropagation(); openEditor('${p.id}')" class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm"><i class="fas fa-edit text-[10px]"></i></button>
+                             <span class="text-[9px] font-black text-slate-300 leading-8 uppercase">Page ${i+1}</span>
+                        </div>
+                        <button onclick="event.stopPropagation(); deletePage('${p.id}')" class="text-slate-200 hover:text-red-500 p-1"><i class="fas fa-times text-xs"></i></button>
+                    </div>
+                    <div class="relative bg-slate-50 rounded-lg overflow-hidden flex items-center justify-center pointer-events-none" style="aspect-ratio: ${1/ratio}; width: 100%;">
+                        <img id="thumb-${p.id}" class="max-w-full max-h-full">
+                    </div>
+                `;
+                // Removed style="transform: rotate" from img above.
+                
+                card.ondragstart = () => { draggedPageId = p.id; card.classList.add('dragging'); };
+                card.ondragend = () => { 
+                    draggedPageId = null; 
+                    card.classList.remove('dragging'); 
+                    document.querySelectorAll('.page-card').forEach(c => c.classList.remove('drop-guide-left', 'drop-guide-right'));
+                    lastDragTarget = null;
+                };
+                
+                // Enhanced dragover logic for singular visuals
+                card.ondragover = e => { 
+                    e.preventDefault(); 
+                    
+                    // Cleanup previous target if different
+                    if (lastDragTarget && lastDragTarget !== card) {
+                        lastDragTarget.classList.remove('drop-guide-left', 'drop-guide-right');
+                    }
+                    lastDragTarget = card;
+
+                    const rect = card.getBoundingClientRect(); 
+                    // Clear both first to avoid double borders
+                    card.classList.remove('drop-guide-left', 'drop-guide-right'); 
+                    
+                    if(e.clientX < rect.left + rect.width/2) {
+                        card.classList.add('drop-guide-left');
+                    } else {
+                        card.classList.add('drop-guide-right');
+                    }
+                };
+                
+                // Cleanup on leave (only if leaving the element entirely)
+                card.ondragleave = e => {
+                     if(e.relatedTarget && !card.contains(e.relatedTarget)) {
+                         card.classList.remove('drop-guide-left', 'drop-guide-right');
+                         if (lastDragTarget === card) lastDragTarget = null;
+                     }
+                };
+
+                card.ondrop = e => { 
+                    e.preventDefault(); 
+                    if (!draggedPageId) return; // Ignore if not an internal page drag (e.g. file drop)
+                    e.stopPropagation(); // Stop bubbling if we handled it
+                    if(draggedPageId === p.id) return; 
+                    saveState(); // Save before reorder
+                    const fromIdx = pagesData.findIndex(x => x.id === draggedPageId); 
+                    let toIdx = pagesData.findIndex(x => x.id === p.id); 
+                    const rect = card.getBoundingClientRect(); 
+                    if(e.clientX > rect.left + rect.width/2) toIdx++; 
+                    if(fromIdx < toIdx) toIdx--; 
+                    const [moved] = pagesData.splice(fromIdx, 1); 
+                    pagesData.splice(toIdx, 0, moved); 
+                    renderPages(); 
+                };
+                card.onclick = (e) => { 
+                    if (isPasteMode) {
+                        pasteToPage(p.id);
+                    } else {
+                        if (!e.ctrlKey && !e.shiftKey) selectedIds.clear(); 
+                        selectedIds.add(p.id); 
+                        renderPages(); 
+                    }
+                };
+                card.ondblclick = () => openEditor(p.id);
+                container.appendChild(card);
+                bakePage(p, 1000).then(url => { if(document.getElementById(`thumb-${p.id}`)) document.getElementById(`thumb-${p.id}`).src = url; });
+            });
+        };
+
+        const bakePage = (p, res) => {
+            return new Promise(async resolve => {
+                const img = await loadImage(p.baseDataUrl);
+                
+                // Determine orientation logic
+                const angle = (p.rotation || 0) % 360;
+                const isSwapped = angle === 90 || angle === 270;
+                
+                // Calculate scale. Target resolution 'res' is for the larger dimension usually.
+                // We map 'res' to the width of the OUTPUT canvas.
+                let scale;
+                if(isSwapped) {
+                     scale = res / img.height;
+                } else {
+                     scale = res / img.width;
+                }
+                
+                const canvas = document.createElement('canvas');
+                if (isSwapped) {
+                    canvas.width = img.height * scale;
+                    canvas.height = img.width * scale;
+                } else {
+                    canvas.width = img.width * scale;
+                    canvas.height = img.height * scale;
+                }
+                
+                const ctx = canvas.getContext('2d');
+                
+                // Apply rotation to the BASE image context
+                ctx.save();
+                ctx.translate(canvas.width/2, canvas.height/2);
+                ctx.rotate(angle * Math.PI / 180);
+                // Draw image centered in the rotated context
+                ctx.drawImage(img, -img.width*scale/2, -img.height*scale/2, img.width*scale, img.height*scale);
+                ctx.restore();
+                
+                // Draw objects
+                // Objects are stored relative to the VISUAL page (0..1). 
+                // Since canvas represents the visual page (rotated), we draw them directly.
+                ctx.fillStyle = "white"; 
+                (p.erasures || []).forEach(e => ctx.fillRect(e.x * canvas.width, e.y * canvas.height, e.w * canvas.width, e.h * canvas.height));
+                
+                for (let obj of p.objects) {
+                    const oW = obj.w * canvas.width; const oH = obj.h * canvas.height;
+                    const oX = obj.x * canvas.width; const oY = obj.y * canvas.height;
+                    if(obj.type === 'text') {
+                        // Standardize font size relative to A4 width (1240px)
+                        const referenceWidth = 1240;
+                        const fs = obj.fontSize * (res / referenceWidth);
+                        ctx.font = `bold ${fs}px sans-serif`; ctx.fillStyle = obj.color; ctx.textBaseline = 'middle';
+                        ctx.fillText(obj.text, oX + (fs*0.1), oY + (oH/2));
+                    } else if (obj.dataUrl) {
+                        const oImg = await loadImage(obj.dataUrl); ctx.drawImage(oImg, oX, oY, oW, oH);
+                    }
+                }
+                resolve(canvas.toDataURL());
+            });
+        };
+
+        // --- Editor Core ---
+        const openEditor = async (id) => {
+            activePageId = id; const p = pagesData.find(x => x.id === id);
+            const cont = document.getElementById('editor-container'); const baseImg = document.getElementById('editor-base-img');
+            cont.querySelectorAll('.draggable-item').forEach(el => el.remove());
+            
+            // Use a standardized high resolution for editing background
+            baseImg.src = await bakePage({...p, objects: []}, 1500);
+            
+            baseImg.onload = () => {
+                const viewport = document.getElementById('editor-viewport');
+                // Fit width logic for better visibility
+                const availableW = viewport.clientWidth - 48; 
+                // naturalWidth is already rotated if applicable
+                const imgRatio = baseImg.naturalWidth / baseImg.naturalHeight;
+                
+                let displayW = Math.min(availableW, 1100); 
+                let displayH = displayW / imgRatio;
+                
+                cont.style.width = displayW + 'px'; 
+                cont.style.height = displayH + 'px';
+                
+                (p.objects || []).forEach(addDraggable);
+                document.getElementById('editor-page-idx').innerText = `Page ${pagesData.indexOf(p)+1} / ${pagesData.length}`;
+            };
+            document.getElementById('editor-modal').classList.remove('hidden');
+            // Editor modal paste logic depends on appClipboard too, but for now user focused on toolbar paste.
+            setTool('select');
+        };
+
+        function deselectAllEditorItems() {
+            document.querySelectorAll('.draggable-item').forEach(el => el.classList.remove('active'));
+            activeDraggable = null;
+            
+            // Revert toolbar to tool state (hide text/box presets unless tool is active)
+            document.getElementById('text-presets').classList.toggle('hidden', currentTool !== 'text' && currentTool !== 'check' && currentTool !== 'x');
+            document.getElementById('box-presets').classList.toggle('hidden', currentTool !== 'box');
+        }
+
+        // Helper to sync toolbar state to selected item properties
+        const syncToolbarToItem = (item) => {
+            if (!item) return;
+            const ta = item.querySelector('textarea');
+            if (ta) {
+                // It is text (or check/x), show text controls
+                document.getElementById('text-presets').classList.remove('hidden');
+                
+                // Sync Size
+                const fs = item.dataset.fontSize || 24;
+                if(document.getElementById('text-size-input')) {
+                     document.getElementById('text-size-input').value = fs;
+                }
+                
+                // Sync Color Highlight
+                const col = item.dataset.color || '#000000';
+                curColor = col; // Update global state too
+                document.querySelectorAll('.preset-btn, [id^="pcolor-"], [id^="pbcolor-"]').forEach(b => b.classList.remove('ring-2','ring-blue-500'));
+                document.getElementById(`pcolor-${col}`)?.classList.add('ring-2','ring-blue-500');
+            }
+        };
+
+        const addDraggable = (obj) => {
+            const cont = document.getElementById('editor-container');
+            const item = document.createElement('div'); item.className = 'draggable-item';
+            item.style.left = (obj.x * cont.clientWidth) + 'px'; item.style.top = (obj.y * cont.clientHeight) + 'px';
+            item.style.width = (obj.w * cont.clientWidth) + 'px'; item.style.height = (obj.h * cont.clientHeight) + 'px';
+            
+            item.dataset.fontSize = obj.fontSize;
+            item.dataset.color = obj.color;
+
+            if(obj.type === 'text') {
+                const ta = document.createElement('textarea'); ta.className = 'direct-edit'; ta.value = obj.text;
+                ta.style.fontSize = (obj.fontSize * (cont.clientWidth/1240)) + 'px'; ta.style.color = obj.color;
+                item.appendChild(ta);
+                ta.onfocus = () => { 
+                    deselectAllEditorItems(); 
+                    item.classList.add('active'); 
+                    activeDraggable = item; 
+                    syncToolbarToItem(item);
+                };
+                ta.oninput = () => { obj.text = ta.value; };
+            } else {
+                const img = document.createElement('img'); img.src = obj.dataUrl; img.className = "w-full h-full pointer-events-none"; item.appendChild(img);
+            }
+            
+            const del = document.createElement('div'); del.innerHTML = '&times;'; del.className = 'delete-btn'; del.onclick = (e) => { e.stopPropagation(); item.remove(); };
+            const res = document.createElement('div'); res.className = 'resize-handle'; 
+            item.append(del, res);
+
+            res.onmousedown = e => { e.stopPropagation(); deselectAllEditorItems(); item.classList.add('active'); activeDraggable = item; compAct = { type:'res', sx:e.clientX, sy:e.clientY, w:item.offsetWidth, h:item.offsetHeight }; };
+            item.onmousedown = e => { 
+                if(e.target === res || e.target === del) return; 
+                e.stopPropagation(); 
+                deselectAllEditorItems(); 
+                item.classList.add('active'); 
+                activeDraggable = item; 
+                syncToolbarToItem(item); // Sync toolbar on click
+                
+                const sx = e.clientX - item.offsetLeft; 
+                const sy = e.clientY - item.offsetTop; 
+                document.onmousemove = me => { item.style.left = (me.clientX-sx)+'px'; item.style.top = (me.clientY-sy)+'px'; }; 
+                document.onmouseup = () => document.onmousemove = null; 
+            };
+            cont.appendChild(item);
+            
+            if(obj.type === 'text' && !obj.text) setTimeout(() => item.querySelector('textarea').focus(), 10);
+        };
+
+        window.addEventListener('mousemove', e => { 
+            if(compAct && compAct.type === 'res' && activeDraggable) { 
+                const dx = e.clientX - compAct.sx; const dy = e.clientY - compAct.sy; 
+                activeDraggable.style.width = Math.max(30, compAct.w + dx) + 'px'; 
+                activeDraggable.style.height = Math.max(20, compAct.h + dy) + 'px'; 
+            } 
+        });
+        window.addEventListener('mouseup', () => compAct = null);
+
+        const closeEditor = () => {
+            saveState(); // Save before committing changes
+            const p = pagesData.find(x => x.id === activePageId); const cont = document.getElementById('editor-container');
+            p.objects = Array.from(cont.querySelectorAll('.draggable-item')).map(el => {
+                const ta = el.querySelector('textarea'); const img = el.querySelector('img');
+                const fs = el.dataset.fontSize ? parseInt(el.dataset.fontSize) : curSize;
+                const col = el.dataset.color || curColor;
+                return { 
+                    type: ta ? 'text' : 'image', 
+                    x: el.offsetLeft / cont.clientWidth, 
+                    y: el.offsetTop / cont.clientHeight, 
+                    w: el.offsetWidth / cont.clientWidth, 
+                    h: el.offsetHeight / cont.clientHeight, 
+                    text: ta ? ta.value : '', 
+                    dataUrl: img ? img.src : '', 
+                    fontSize: fs, 
+                    color: col 
+                };
+            });
+            document.getElementById('editor-modal').classList.add('hidden'); renderPages();
+        };
+
+        // --- Tools ---
+        const setTool = (t) => {
+            currentTool = t; deselectAllEditorItems();
+            document.querySelectorAll('[id^="tool-"]').forEach(b => b.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-50'));
+            const btn = document.getElementById(`tool-${t}`); if(btn) btn.classList.add('ring-2', 'ring-blue-500', 'bg-blue-50');
+            
+            // Show text presets for text, check, and x
+            document.getElementById('text-presets').classList.toggle('hidden', t !== 'text' && t !== 'check' && t !== 'x');
+            document.getElementById('box-presets').classList.toggle('hidden', t !== 'box');
+            document.getElementById('signature-presets').classList.toggle('hidden', t !== 'sign');
+            
+            document.getElementById('editor-container').style.cursor = t === 'select' ? 'default' : 'crosshair';
+            
+            if(t === 'sign') {
+                if(savedSignatures.length === 0) {
+                    openSignatureModal();
+                } else if (activeSignatureIndex === -1) {
+                    // Default to first if none selected
+                    setActiveSignature(0);
+                    document.getElementById('editor-container').style.cursor = 'copy';
+                } else {
+                    document.getElementById('editor-container').style.cursor = 'copy';
+                }
+            }
+        };
+
+        const setSimplePreset = (type, val) => {
+            if(type === 'thick') { curThick = val; document.querySelectorAll('[id^="pthick-"]').forEach(b => b.classList.remove('active', 'ring-2', 'ring-blue-500')); document.getElementById(`pthick-${val}`).classList.add('active', 'ring-2', 'ring-blue-500'); }
+            if(type === 'color') { curColor = val; document.querySelectorAll('.preset-btn, [id^="pcolor-"], [id^="pbcolor-"]').forEach(b => b.classList.remove('ring-2','ring-blue-500')); document.getElementById(`pcolor-${val}`)?.classList.add('ring-2','ring-blue-500'); document.getElementById(`pbcolor-${val}`)?.classList.add('ring-2','ring-blue-500'); }
+            
+            // Apply to active item if one exists
+            if(activeDraggable) {
+                if(type === 'color') {
+                   activeDraggable.dataset.color = val;
+                   const ta = activeDraggable.querySelector('textarea');
+                   if(ta) ta.style.color = val;
+                }
+            }
+        };
+
+        const updateTextSize = (val) => {
+            curSize = parseInt(val);
+            if(activeDraggable && activeDraggable.querySelector('textarea')) {
+               const ta = activeDraggable.querySelector('textarea');
+               const cont = document.getElementById('editor-container');
+               activeDraggable.dataset.fontSize = curSize;
+               ta.style.fontSize = (curSize * (cont.clientWidth/1240)) + 'px';
+            }
+        };
+
+        const edCont = document.getElementById('editor-container');
+        const drawGuide = document.getElementById('drawing-guide');
+
+        edCont.onmousedown = e => {
+            if(e.target !== edCont && e.target !== document.getElementById('editor-base-img')) return;
+            deselectAllEditorItems(); if(currentTool === 'select') return;
+            
+            // Handle Signature Stamp
+            if(currentTool === 'sign' && activeSignatureIndex >= 0 && savedSignatures[activeSignatureIndex]) {
+                const sigData = savedSignatures[activeSignatureIndex];
+                const r = edCont.getBoundingClientRect();
+                const x = (e.clientX - r.left) / r.width;
+                const y = (e.clientY - r.top) / r.height;
+                const w = 0.2; // 20% width default
+                const h = w / sigData.ratio * (r.width/r.height); // Maintain aspect ratio
+                addDraggable({ type: 'image', dataUrl: sigData.url, x: x - w/2, y: y - h/2, w, h });
+                setTool('select');
+                return;
+            }
+
+            const r = edCont.getBoundingClientRect(); isDrawing = true; startX = e.clientX - r.left; startY = e.clientY - r.top;
+            drawGuide.style.left = startX + 'px'; drawGuide.style.top = startY + 'px'; drawGuide.style.width = '0'; drawGuide.style.height = '0'; drawGuide.classList.remove('hidden');
+        };
+
+        window.addEventListener('mousemove', e => {
+            if(!isDrawing) return; const r = edCont.getBoundingClientRect();
+            const curX = Math.max(0, Math.min(e.clientX - r.left, r.width)), curY = Math.max(0, Math.min(e.clientY - r.top, r.height));
+            drawGuide.style.width = Math.abs(curX - startX) + 'px'; drawGuide.style.height = Math.abs(curY - startY) + 'px';
+            drawGuide.style.left = Math.min(curX, startX) + 'px'; drawGuide.style.top = Math.min(curY, startY) + 'px';
+        });
+
+        window.addEventListener('mouseup', e => {
+            if(!isDrawing) return; 
+            isDrawing = false; 
+            const r = edCont.getBoundingClientRect(); 
+            const w = drawGuide.offsetWidth / r.width;
+            const h = drawGuide.offsetHeight / r.height;
+            const x = drawGuide.offsetLeft / r.width;
+            const y = drawGuide.offsetTop / r.height;
+            drawGuide.classList.add('hidden');
+            if(w < 0.005 && currentTool !== 'text' && currentTool !== 'check' && currentTool !== 'x') return;
+
+            if(currentTool === 'text') addDraggable({ type:'text', x, y, w: Math.max(w, 0.15), h: Math.max(h, 0.05), text:'', fontSize: curSize, color: curColor });
+            if(currentTool === 'check') addDraggable({ type:'text', x, y, w: Math.max(w, 0.05), h: Math.max(h, 0.05), text:'✔', fontSize: curSize*1.5, color: curColor });
+            if(currentTool === 'x') addDraggable({ type:'text', x, y, w: Math.max(w, 0.05), h: Math.max(h, 0.05), text:'✘', fontSize: curSize*1.5, color: curColor });
+            
+            if(currentTool === 'highlight') addDraggable({ type:'image', dataUrl: createColorRect('#ffff00', 0.4), x, y, w, h });
+            if(currentTool === 'whiteout') addDraggable({ type:'image', dataUrl: createColorRect('#ffffff', 1.0), x, y, w, h });
+            if(currentTool === 'box') addDraggable({ type:'image', dataUrl: createBoxImg(curColor, curThick), x, y, w, h });
+            setTool('select');
+        });
+
+        // --- Helpers ---
+        const createColorRect = (c, a) => { const cn = document.createElement('canvas'); cn.width=100; cn.height=100; const cx=cn.getContext('2d'); cx.globalAlpha=a; cx.fillStyle=c; cx.fillRect(0,0,100,100); return cn.toDataURL(); };
+        const createBoxImg = (c, t) => { const cn = document.createElement('canvas'); cn.width=200; cn.height=200; const cx=cn.getContext('2d'); cx.strokeStyle=c; cx.lineWidth=t*2.5; cx.strokeRect(t,t,200-t*2,200-t*2); return cn.toDataURL(); };
+        const duplicateSelected = () => { if(!selectedIds.size) return; saveState(); const n = []; pagesData.forEach(p => { n.push(p); if(selectedIds.has(p.id)) n.push({...JSON.parse(JSON.stringify(p)), id: Math.random().toString(36).substr(2,9)}); }); pagesData = n; renderPages(); };
+        const rotateSelected = (deg) => { 
+            saveState(); 
+            pagesData.forEach(p => { 
+                if(selectedIds.has(p.id)) {
+                    // Update rotation (base image rotation)
+                    p.rotation = (p.rotation + deg) % 360; 
+                    
+                    // Swap dimensions in metadata (so layout knows it's rotated)
+                    const temp = p.width;
+                    p.width = p.height;
+                    p.height = temp;
+
+                    // Transform Erasures
+                    // Coordinate transform for 90 deg CW: x' = 1 - (y+h), y' = x
+                    if(p.erasures) {
+                        p.erasures = p.erasures.map(e => ({
+                            x: 1 - (e.y + e.h),
+                            y: e.x,
+                            w: e.h,
+                            h: e.w
+                        }));
+                    }
+
+                    // Transform Objects
+                    // Move X/Y. 
+                    // For 'text' objects, KEEP w/h (do not rotate box shape, keep horizontal text horizontal).
+                    // For 'image' objects (signature, etc), SWAP w/h (rotate box shape).
+                    // This is a compromise to keep text readable.
+                    if(p.objects) {
+                        p.objects = p.objects.map(o => {
+                            const newX = 1 - (o.y + o.h);
+                            const newY = o.x;
+                            let newW = o.w;
+                            let newH = o.h;
+                            
+                            // Swap W/H for non-text objects
+                            if (o.type !== 'text') {
+                                newW = o.h;
+                                newH = o.w;
+                            }
+                            // For Text, we keep W/H as is (so text box stays horizontal shape)
+                            
+                            return {
+                                ...o,
+                                x: newX,
+                                y: newY,
+                                w: newW,
+                                h: newH
+                            };
+                        });
+                    }
+                }
+            }); 
+            renderPages(); 
+        };
+        const addBlankPage = () => { saveState(); const c = document.createElement('canvas'); c.width=1240; c.height=1754; const cx=c.getContext('2d'); cx.fillStyle='white'; cx.fillRect(0,0,1240,1754); pagesData.push({ id: Math.random().toString(36).substr(2,9), baseDataUrl: c.toDataURL(), objects: [], erasures: [], rotation:0, width: 1240, height: 1754 }); renderPages(); };
+        const deletePage = (id) => { saveState(); pagesData = pagesData.filter(x => x.id !== id); renderPages(); };
+        const deleteSelected = () => { saveState(); pagesData = pagesData.filter(p => !selectedIds.has(p.id)); selectedIds.clear(); renderPages(); };
+        const showToast = (m) => { const t = document.getElementById('toast'); t.innerText = m; t.style.opacity = 1; setTimeout(() => t.style.opacity = 0, 3000); };
+        const closeToolModal = () => {
+             document.getElementById('tool-modal').classList.add('hidden');
+             window.onmousemove = null; // Clean up modal listener
+             window.onmouseup = null;
+        };
+        const navigateEditor = (dir) => { const ci = pagesData.findIndex(x => x.id === activePageId); const ni = ci + dir; if(ni >= 0 && ni < pagesData.length) { closeEditor(); openEditor(pagesData[ni].id); } };
+        document.getElementById('zoom-slider').oninput = e => { document.documentElement.style.setProperty('--card-width', e.target.value + 'px'); renderPages(); };
+        
+        // --- Signature Logic ---
+        const openSignatureModal = async () => { 
+            const modal = document.getElementById('signature-modal');
+            modal.classList.remove('hidden'); 
+            const c = document.getElementById('sig-canvas'); 
+            c.width = c.offsetWidth; 
+            c.height = c.offsetHeight; 
+            const ctx = c.getContext('2d'); 
+            ctx.lineWidth = 3; 
+            ctx.lineCap = 'round'; 
+            ctx.clearRect(0,0,c.width, c.height);
+
+            // If we are editing an existing one? For now simple logic: always new or just reset
+            // User requested "redraw" button to open this.
+
+            // Drawing logic
+            c.onmousedown = e => { 
+                ctx.beginPath(); 
+                ctx.moveTo(e.offsetX, e.offsetY); 
+                c.onmousemove = me => { 
+                    ctx.lineTo(me.offsetX, me.offsetY); 
+                    ctx.stroke(); 
+                }; 
+            }; 
+            window.onmouseup = () => c.onmousemove = null; 
+        };
+
+        const handleSignatureUpload = (input) => {
+            if(input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        const c = document.getElementById('sig-canvas');
+                        const ctx = c.getContext('2d');
+                        ctx.clearRect(0,0,c.width, c.height);
+                        // Center and fit
+                        const ratio = Math.min(c.width / img.width, c.height / img.height);
+                        const w = img.width * ratio;
+                        const h = img.height * ratio;
+                        ctx.drawImage(img, (c.width - w)/2, (c.height - h)/2, w, h);
+                    }
+                    img.src = e.target.result;
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        };
+
+        const clearSignature = () => {
+             const c = document.getElementById('sig-canvas');
+             c.getContext('2d').clearRect(0,0,c.width, c.height);
+             document.getElementById('sig-upload-input').value = '';
+        };
+
+        const saveSignature = () => {
+             const c = document.getElementById('sig-canvas');
+             // Check if empty? Allow saving empty? Assume non-empty or user intent.
+             const dataUrl = c.toDataURL();
+             const ratio = c.width / c.height;
+             
+             savedSignatures.push({ url: dataUrl, ratio: ratio });
+             
+             // Render list
+             renderSignatureList();
+             
+             // Select the new one
+             setActiveSignature(savedSignatures.length - 1);
+             
+             document.getElementById('signature-modal').classList.add('hidden');
+             setTool('sign');
+             showToast('Signature Saved. Click to place.');
+        };
+        
+        const renderSignatureList = () => {
+            const list = document.getElementById('signature-list');
+            list.innerHTML = '';
+            savedSignatures.forEach((sig, idx) => {
+                const img = document.createElement('img');
+                img.src = sig.url;
+                img.className = `sig-item h-full w-auto object-contain bg-white ${idx === activeSignatureIndex ? 'active' : ''}`;
+                img.onclick = () => { setActiveSignature(idx); };
+                list.appendChild(img);
+            });
+        };
+        
+        const setActiveSignature = (idx) => {
+            activeSignatureIndex = idx;
+            const list = document.getElementById('signature-list');
+            Array.from(list.children).forEach((el, i) => {
+                if(i === idx) el.classList.add('active');
+                else el.classList.remove('active');
+            });
+        };
+
+        // --- Modal & Tool Logic ---
+        const openCropModal = async () => { 
+            if(!selectedIds.size) return showToast('Select a page first'); 
+            currentModalMode = 'crop';
+            const p = pagesData.find(x => x.id === [...selectedIds][0]); 
+            document.getElementById('tool-img').src = await bakePage(p, 1200); 
+            document.getElementById('tool-modal').classList.remove('hidden'); 
+            document.querySelector('#tool-modal span').innerText = 'Select Area to Copy';
+            document.getElementById('tool-confirm-btn').innerText = 'Copy Selection';
+            setupModalTool(p);
+        };
+
+        const openEraseModal = async () => {
+             if(!selectedIds.size) return showToast('Select a page first'); 
+            currentModalMode = 'erase';
+            const p = pagesData.find(x => x.id === [...selectedIds][0]); 
+            document.getElementById('tool-img').src = await bakePage(p, 1200); 
+            document.getElementById('tool-modal').classList.remove('hidden'); 
+            document.querySelector('#tool-modal span').innerText = 'Select Area to Erase';
+            document.getElementById('tool-confirm-btn').innerText = 'Erase Selection';
+            setupModalTool(p);
+        }
+
+        const setupModalTool = (p) => {
+            const wrap = document.getElementById('tool-wrap'); 
+            const box = document.getElementById('selection-box'); 
+            box.style.width = box.style.height = '0'; 
+            box.style.display = 'block'; // Ensure visible
+
+            // Use local state variables to avoid conflict with global isDrawing
+            let isSelecting = false;
+            let sx = 0, sy = 0;
+
+            wrap.onmousedown = e => { 
+                isSelecting = true; 
+                const r = wrap.getBoundingClientRect(); 
+                sx = e.clientX - r.left; 
+                sy = e.clientY - r.top; 
+                box.style.left = sx + 'px'; 
+                box.style.top = sy + 'px'; 
+                box.style.width = '0px';
+                box.style.height = '0px';
+                e.preventDefault(); 
+            }; 
+            
+            // Assign to window.onmousemove to capture moves outside the image element
+            window.onmousemove = e => { 
+                if(!isSelecting) return; 
+                const r = wrap.getBoundingClientRect(); 
+                let ex = e.clientX - r.left; 
+                let ey = e.clientY - r.top; 
+                
+                // Clamp values
+                ex = Math.max(0, Math.min(ex, r.width));
+                ey = Math.max(0, Math.min(ey, r.height));
+
+                box.style.width = Math.abs(ex-sx)+'px'; 
+                box.style.height = Math.abs(ey-sy)+'px'; 
+                box.style.left = Math.min(ex,sx)+'px'; 
+                box.style.top = Math.min(ey,sy)+'px'; 
+            }; 
+            
+            window.onmouseup = () => isSelecting = false; 
+            
+            document.getElementById('tool-confirm-btn').onclick = async () => { 
+                if (currentModalMode === 'crop') {
+                    const pct = { w: box.offsetWidth/wrap.clientWidth, h: box.offsetHeight/wrap.clientHeight, x: box.offsetLeft/wrap.clientWidth, y: box.offsetTop/wrap.clientHeight }; 
+                    if(pct.w > 0 && pct.h > 0) {
+                        const fullImg = await loadImage(await bakePage(p, 2000)); 
+                        const c = document.createElement('canvas'); 
+                        c.width = fullImg.width * pct.w; 
+                        c.height = fullImg.height * pct.h; 
+                        c.getContext('2d').drawImage(fullImg, pct.x * fullImg.width, pct.y * fullImg.height, c.width, c.height, 0, 0, c.width, c.height, 0, 0, c.width, c.height, 0, 0, c.width, c.height); 
+                        appClipboard = { dataUrl: c.toDataURL(), w: pct.w, h: pct.h }; 
+                        showToast('Copied! Click Paste then a page.'); 
+                        updateToolbarState();
+                    }
+                    closeToolModal(); 
+                } else if (currentModalMode === 'erase') {
+                    saveState();
+                    const pct = { w: box.offsetWidth/wrap.clientWidth, h: box.offsetHeight/wrap.clientHeight, x: box.offsetLeft/wrap.clientWidth, y: box.offsetTop/wrap.clientHeight };
+                    if(pct.w > 0 && pct.h > 0) {
+                        if (!p.erasures) p.erasures = [];
+                        p.erasures.push(pct);
+                        showToast('Area Erased.');
+                    }
+                    closeToolModal();
+                    renderPages();
+                }
+            }; 
+        }
+
+        const pasteFromClipboard = () => { if(appClipboard) addDraggable({ type: 'image', dataUrl: appClipboard.dataUrl, x: 0.1, y: 0.1, w: appClipboard.w, h: appClipboard.h }); };
+
+        async function saveToPdf() {
+            showToast('Exporting PDF...'); 
+            const { PDFDocument, degrees } = PDFLib; 
+            const pdfDoc = await PDFDocument.create();
+            for(let p of pagesData) { 
+                const img = await pdfDoc.embedPng(await bakePage(p, 1600)); 
+                const page = pdfDoc.addPage([img.width, img.height]); 
+                page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height }); 
+                // Rotation is already baked into the image. No setRotation needed.
+            }
+            const bytes = await pdfDoc.save(); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], {type:'application/pdf'})); a.download = 'organized.pdf'; a.click();
+        }
+    </script>
+</body>
+</html>
