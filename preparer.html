@@ -54,7 +54,7 @@
                     <i class="fas fa-folder-open text-blue-500 text-xl"></i>
                     <h1 class="font-black text-xl tracking-tight">FILE PREPARER</h1>
                 </div>
-                <a href="vip_Ehera_PDF.html" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm">
+                <a href="index.html" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm">
                     <i class="fas fa-home"></i>
                     <span>Home</span>
                 </a>
@@ -676,19 +676,36 @@
                             // 2. Embed the cropped page
                             const embeddedSegment = await outPdf.embedPage(scratchPage);
 
-                            // 3. Create a NEW blank page in the output with the ORIGINAL dimensions
-                            const newPage = outPdf.addPage([width, height]);
+                            // 3. Create a NEW blank page in the output with LETTER dimensions
+                            // Letter is 612 x 792
+                            const letterW = 612;
+                            const letterH = 792;
+                            const newPage = outPdf.addPage([letterW, letterH]);
 
                             // 4. Draw the segment
-                            // Align to top-left (plus margin) or center horizontally
-                            const destX = (splitDir === 'V') ? (width - cutW) / 2 : 0;
-                            const destY = height - cutH - topMargin;
+                            // Scale to fit if necessary (with margin), or center
+                            const sideMargin = 20;
+                            const topMargin = 50;
+                            const bottomMargin = 20;
+
+                            const maxW = letterW - (sideMargin * 2);
+                            const maxH = letterH - topMargin - bottomMargin;
+                            
+                            // Determine scaling factor to fit within margins while maintaining aspect ratio
+                            const scale = Math.min(1, Math.min(maxW / cutW, maxH / cutH));
+                            
+                            const drawW = cutW * scale;
+                            const drawH = cutH * scale;
+
+                            // Horizontal center, Top align
+                            const destX = (letterW - drawW) / 2;
+                            const destY = letterH - topMargin - drawH;
                             
                             newPage.drawPage(embeddedSegment, {
                                 x: destX,
                                 y: destY, 
-                                width: cutW,
-                                height: cutH,
+                                width: drawW,
+                                height: drawH,
                             });
                         }
                     } else {
@@ -800,26 +817,43 @@
         async function createTOCImage(fileName, fileInfoList, timestamp) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            const width = 595 * 2; const height = 842 * 2;
+            // Changed from A4 to Letter Size (612x792 points * 2)
+            const width = 612 * 2; const height = 792 * 2;
             canvas.width = width; canvas.height = height;
             ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, height);
             ctx.fillStyle = '#1e293b'; ctx.font = 'bold 64px sans-serif'; ctx.fillText('Table of Contents', 80, 140);
             ctx.font = '32px sans-serif'; ctx.fillStyle = '#64748b'; ctx.fillText(`File: ${fileName}.pdf`, 80, 200);
             ctx.fillStyle = '#10b981'; ctx.fillText(`Created: ${timestamp}`, 80, 240);
-            const startY = 320; const rowHeight = 60; const marginX = 80; const tableWidth = width - (marginX * 2);
+            
+            const startY = 320; 
+            const rowHeight = 45; // Reduced from 60
+            const marginX = 80; const tableWidth = width - (marginX * 2);
+            
+            // Header
             ctx.fillStyle = '#f8fafc'; ctx.fillRect(marginX, startY, tableWidth, rowHeight);
-            ctx.fillStyle = '#475569'; ctx.font = 'bold 28px sans-serif';
-            ctx.fillText('No.', marginX + 30, startY + 40); ctx.fillText('File Name', marginX + 150, startY + 40); ctx.fillText('Page', marginX + tableWidth - 100, startY + 40);
+            ctx.fillStyle = '#475569'; ctx.font = 'bold 24px sans-serif';
+            // Adjusted Y offset for text centering (baseline)
+            const textOffset = 32;
+            ctx.fillText('No.', marginX + 30, startY + textOffset); 
+            ctx.fillText('File Name', marginX + 150, startY + textOffset); 
+            ctx.fillText('Page', marginX + tableWidth - 100, startY + textOffset);
+            
             ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(marginX, startY + rowHeight); ctx.lineTo(marginX + tableWidth, startY + rowHeight); ctx.stroke();
-            ctx.font = '26px sans-serif'; ctx.fillStyle = '#334155';
+            
+            // Content
+            // Font size 22px (approx 11pt)
+            ctx.font = '22px sans-serif'; ctx.fillStyle = '#334155';
+            
             fileInfoList.forEach((item, i) => {
                 const currentY = startY + rowHeight + (i * rowHeight);
-                ctx.fillText(`${i + 1}`, marginX + 30, currentY + 40);
-                let name = item.name.length > 40 ? item.name.substring(0, 37) + '...' : item.name;
-                ctx.fillText(name, marginX + 150, currentY + 40);
-                ctx.fillStyle = '#6366f1'; ctx.font = 'bold 26px sans-serif';
-                ctx.fillText(`${item.startPage}`, marginX + tableWidth - 100, currentY + 40);
-                ctx.font = '26px sans-serif'; ctx.fillStyle = '#334155';
+                ctx.fillText(`${i + 1}`, marginX + 30, currentY + textOffset);
+                let name = item.name.length > 50 ? item.name.substring(0, 47) + '...' : item.name;
+                ctx.fillText(name, marginX + 150, currentY + textOffset);
+                
+                ctx.fillStyle = '#6366f1'; ctx.font = 'bold 22px sans-serif';
+                ctx.fillText(`${item.startPage}`, marginX + tableWidth - 100, currentY + textOffset);
+                
+                ctx.font = '22px sans-serif'; ctx.fillStyle = '#334155';
                 ctx.strokeStyle = '#f1f5f9'; ctx.beginPath(); ctx.moveTo(marginX, currentY + rowHeight); ctx.lineTo(marginX + tableWidth, currentY + rowHeight); ctx.stroke();
             });
             return canvas.toDataURL('image/png');
@@ -831,7 +865,8 @@
             try {
                 const { PDFDocument, PageSizes, rgb, StandardFonts } = PDFLib;
                 const mergedPdf = await PDFDocument.create();
-                const A4 = PageSizes.A4;
+                // Changed from A4 to Letter
+                const Letter = PageSizes.Letter;
                 const now = new Date();
                 const timestamp = now.toISOString().slice(0, 19).replace('T', ' ');
                 const outputName = document.getElementById('output-filename').value.trim() || "merged_document";
@@ -854,8 +889,9 @@
 
                 if (useToc) {
                     const tocImg = await mergedPdf.embedPng(await createTOCImage(outputName, fileInfoForToc, timestamp));
-                    const p = mergedPdf.addPage(A4);
-                    p.drawImage(tocImg, { x: 0, y: 0, width: A4[0], height: A4[1] });
+                    // Add Letter sized page
+                    const p = mergedPdf.addPage(Letter);
+                    p.drawImage(tocImg, { x: 0, y: 0, width: Letter[0], height: Letter[1] });
                 }
 
                 for (const item of mergeFilesList) {
@@ -867,9 +903,10 @@
                     } else {
                         const isPng = item.file.type === 'image/png';
                         const img = isPng ? await mergedPdf.embedPng(buffer) : await mergedPdf.embedJpg(buffer);
-                        const p = mergedPdf.addPage(A4);
-                        const dims = img.scaleToFit(A4[0] - 40, A4[1] - 40);
-                        p.drawImage(img, { x: (A4[0] - dims.width)/2, y: (A4[1] - dims.height)/2, width: dims.width, height: dims.height });
+                        // Add Letter sized page for image
+                        const p = mergedPdf.addPage(Letter);
+                        const dims = img.scaleToFit(Letter[0] - 40, Letter[1] - 40);
+                        p.drawImage(img, { x: (Letter[0] - dims.width)/2, y: (Letter[1] - dims.height)/2, width: dims.width, height: dims.height });
                     }
                 }
 
@@ -883,13 +920,17 @@
                         });
                     }
                     const tocPage = pages[0];
-                    const tocStartY = 320; const rowH = 60; const scale = 0.5;
+                    const tocStartY = 320; 
+                    const rowH = 45; // Matches createTOCImage
+                    const scale = 0.5;
+                    
                     fileInfoForToc.forEach((info, i) => {
                          const targetPageIdx = info.startPage - 1;
                          if(targetPageIdx < pages.length) {
                              const rowHeightPoints = rowH * scale; 
                              const rowTopFromTopEdge = (tocStartY + rowH + (i * rowH)) * scale;
-                             const rowTopY = A4[1] - rowTopFromTopEdge;
+                             // Adjusted using Letter height
+                             const rowTopY = Letter[1] - rowTopFromTopEdge;
                              const rowBottomY = rowTopY - rowHeightPoints;
 
                              const link = mergedPdf.context.register(mergedPdf.context.obj({ 
@@ -986,5 +1027,4 @@
         }
     </script>
 </body>
-
 </html>
