@@ -9,6 +9,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <!-- Added fontkit for Custom Font Support (Korean) -->
+    <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 
     <script>
@@ -33,7 +35,6 @@
         .overlay-layer { position: absolute; inset: 0; pointer-events: none; }
         
         /* Interactive Object Styles */
-        /* Changed: align-items to flex-end to anchor text at the bottom, removed padding */
         .interactive-item { 
             position: absolute; cursor: grab; pointer-events: auto; user-select: none; z-index: 10; 
             padding: 0; display: flex; align-items: flex-end; justify-content: center; 
@@ -42,7 +43,6 @@
         
         /* DRAFT (Manual Stamps) - YELLOW, SOLID */
         .item-draft { 
-            /* border: 2px solid #fbbf24; Replaced with box-shadow to prevent size shift */
             box-shadow: 0 0 0 2px #fbbf24;
             background-color: rgba(251, 191, 36, 0.2);
             z-index: 30; 
@@ -53,7 +53,6 @@
         
         /* AUTO - INACTIVE (Blurry) */
         .item-auto-inactive {
-            /* border: 1px dashed #94a3b8; Replaced with box-shadow */
             box-shadow: 0 0 0 1px #94a3b8;
             background-color: rgba(148, 163, 184, 0.1);
             opacity: 0.5;
@@ -62,14 +61,12 @@
         .item-auto-inactive:hover {
             filter: none;
             opacity: 1;
-            /* border-color: #3b82f6; */
             box-shadow: 0 0 0 2px #3b82f6;
             background-color: rgba(59, 130, 246, 0.1);
         }
 
         /* AUTO - ACTIVE FIELDS (Solid Blue) */
         .item-auto-active-field {
-            /* border: 2px solid #3b82f6; */
             box-shadow: 0 0 0 2px #3b82f6;
             background-color: rgba(59, 130, 246, 0.15);
             opacity: 1;
@@ -79,7 +76,6 @@
 
         /* AUTO - ACTIVE MARKERS (Solid Purple/Red) */
         .item-auto-active-marker {
-            /* border: 2px solid #9333ea; */
             box-shadow: 0 0 0 2px #9333ea;
             background-color: rgba(147, 51, 234, 0.15);
             opacity: 1;
@@ -90,9 +86,16 @@
         /* Specific Type Styles */
         .item-eraser { 
             background-color: white; 
-            /* border: 1px solid #e2e8f0; */
-            box-shadow: inset 0 0 0 1px #e2e8f0; /* Eraser uses inset to not expand */
+            box-shadow: inset 0 0 0 1px #e2e8f0; 
             opacity: 0.8; 
+        }
+        
+        .item-highlight {
+            mix-blend-mode: multiply; 
+        }
+
+        .item-box {
+            background-color: transparent;
         }
         
         .interactive-item.selected { 
@@ -102,27 +105,32 @@
             filter: none !important; 
             opacity: 1 !important; 
         }
-        .interactive-item.selected:not(.item-eraser) { background-color: rgba(59, 130, 246, 0.15); }
+        .interactive-item.selected:not(.item-eraser):not(.item-highlight):not(.item-box) { background-color: rgba(59, 130, 246, 0.15); }
         
         /* Resize Handle */
         .resize-handle { 
-            position: absolute; width: 16px; height: 16px; background: #3b82f6; 
-            border-radius: 50%; right: -8px; top: -8px; cursor: nwse-resize; 
+            position: absolute; width: 14px; height: 14px; background: #3b82f6; 
+            border-radius: 50%; right: -7px; top: -7px; cursor: nwse-resize; 
             display: none; z-index: 60; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
         .interactive-item.selected .resize-handle { display: block; }
 
-        /* Delete Button */
+        /* MODIFIED: Control Buttons Positioned Outside */
         .delete-btn {
-            position: absolute; top: -12px; left: -12px; width: 24px; height: 24px;
+            position: absolute; 
+            top: -30px; /* Moved outside (above) */
+            left: -12px; 
+            width: 24px; height: 24px;
             background-color: #ef4444; color: white; border-radius: 50%;
             font-size: 14px; display: none; align-items: center; justify-content: center;
             cursor: pointer; z-index: 70; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: 2px solid white;
         }
         
-        /* Edit Button */
         .edit-btn {
-            position: absolute; top: -12px; right: 18px; width: 24px; height: 24px;
+            position: absolute; 
+            top: -30px; /* Moved outside (above) */
+            left: 20px; /* Positioned next to delete button */
+            width: 24px; height: 24px;
             background-color: #3b82f6; color: white; border-radius: 50%;
             font-size: 10px; display: none; align-items: center; justify-content: center;
             cursor: pointer; z-index: 70; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: 2px solid white;
@@ -152,7 +160,7 @@
                 <h1 class="text-lg font-black tracking-wide uppercase flex items-center gap-2">
                     <i class="fas fa-magic text-cpa-500"></i> Auto-Filler
                 </h1>
-                <a href="vip_Ehera_PDF.html" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs px-2 py-1 rounded text-slate-300 hover:text-white transition-colors" title="Go Home">
+                <a href="index.html" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs px-2 py-1 rounded text-slate-300 hover:text-white transition-colors" title="Go Home">
                     <i class="fas fa-home"></i> Home
                 </a>
             </div>
@@ -171,21 +179,28 @@
 
         <!-- TOOLS SECTION -->
         <div class="p-3 bg-slate-50 border-b space-y-3">
-            <div class="grid grid-cols-4 gap-2">
+            <div class="grid grid-cols-3 gap-2">
                 <button id="btn-tool-text" class="flex items-center justify-center gap-2 py-2 px-1 rounded-lg border bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors" onclick="UI.setTool('tool_text')" title="Text">
-                    <i class="fas fa-font text-purple-600"></i>
+                    <i class="fas fa-font text-purple-600"></i> <span class="text-[9px]">Text</span>
                 </button>
                 <button id="btn-tool-check" class="flex items-center justify-center gap-2 py-2 px-1 rounded-lg border bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors" onclick="UI.setTool('tool_check')" title="Check Mark">
-                    <i class="fas fa-check text-green-600"></i>
+                    <i class="fas fa-check text-green-600"></i> <span class="text-[9px]">Check</span>
                 </button>
                 <button id="btn-tool-cross" class="flex items-center justify-center gap-2 py-2 px-1 rounded-lg border bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors" onclick="UI.setTool('tool_cross')" title="Cross Mark">
-                    <i class="fas fa-times text-red-600"></i>
+                    <i class="fas fa-times text-red-600"></i> <span class="text-[9px]">Cross</span>
+                </button>
+                <button id="btn-tool-highlight" class="flex items-center justify-center gap-2 py-2 px-1 rounded-lg border bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors" onclick="UI.setTool('tool_highlight')" title="Highlight">
+                    <i class="fas fa-highlighter text-yellow-500"></i> <span class="text-[9px]">Hilite</span>
+                </button>
+                <button id="btn-tool-box" class="flex items-center justify-center gap-2 py-2 px-1 rounded-lg border bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors" onclick="UI.setTool('tool_box')" title="Box">
+                    <i class="far fa-square text-blue-500"></i> <span class="text-[9px]">Box</span>
                 </button>
                 <button id="btn-tool-eraser" class="flex items-center justify-center gap-2 py-2 px-1 rounded-lg border bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors" onclick="UI.setTool('tool_eraser')" title="Eraser">
-                    <i class="fas fa-eraser text-slate-500"></i>
+                    <i class="fas fa-eraser text-slate-500"></i> <span class="text-[9px]">Erase</span>
                 </button>
             </div>
             
+            <!-- Text Settings -->
             <div id="tool-text-settings" class="hidden bg-white rounded-xl border p-3 space-y-2 animate-in shadow-sm">
                 <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Text Settings</div>
                 <div class="flex gap-2">
@@ -198,10 +213,32 @@
                         <input type="color" value="#000000" class="h-7 w-12 p-0 border rounded cursor-pointer" onchange="State.textSettings.color = this.value">
                     </div>
                 </div>
-                <p class="text-[9px] text-slate-400 italic text-right mt-1">Double-click or use <i class="fas fa-pen text-blue-500"></i> to edit</p>
             </div>
 
-            <!-- New Shared Options (Opacity) -->
+            <!-- Highlight Settings -->
+            <div id="tool-highlight-settings" class="hidden bg-white rounded-xl border p-3 space-y-2 animate-in shadow-sm">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Highlight Color</div>
+                <div class="flex gap-2">
+                    <input type="color" value="#facc15" class="h-8 w-full p-0 border rounded cursor-pointer" onchange="State.highlightSettings.color = this.value">
+                </div>
+            </div>
+
+            <!-- Box Settings -->
+            <div id="tool-box-settings" class="hidden bg-white rounded-xl border p-3 space-y-2 animate-in shadow-sm">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Box Settings</div>
+                <div class="flex gap-2">
+                    <div class="flex-1">
+                        <label class="text-[9px] text-slate-500 font-bold block mb-1">Thick</label>
+                        <input type="number" value="2" class="w-full text-xs p-1.5 border rounded outline-none" onchange="State.boxSettings.thickness = parseInt(this.value)">
+                    </div>
+                    <div>
+                        <label class="text-[9px] text-slate-500 font-bold block mb-1">Color</label>
+                        <input type="color" value="#ef4444" class="h-7 w-12 p-0 border rounded cursor-pointer" onchange="State.boxSettings.color = this.value">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shared Options (Opacity) -->
             <div id="tool-common-settings" class="hidden bg-white rounded-xl border p-3 space-y-2 animate-in shadow-sm">
                 <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Options</div>
                 <label class="flex items-center justify-between cursor-pointer hover:bg-slate-50 rounded p-1 -mx-1 transition-colors">
@@ -327,7 +364,9 @@
             signatureImg: localStorage.getItem('cpa_sig_img') || null,
             history: [],
             textSettings: { text: '', size: 12, color: '#000000' },
-            isOpaque: false, // NEW: Opaque background setting
+            highlightSettings: { color: '#facc15' }, // NEW
+            boxSettings: { color: '#ef4444', thickness: 2 }, // NEW
+            isOpaque: false,
             applyFields: false,
             applyMarkers: false
         };
@@ -378,7 +417,13 @@
             },
 
             onCanvasMouseDown: (e, pIdx) => {
-                if (State.activeTool !== 'tool_eraser') return;
+                // Modified to handle eraser, highlight, and box dragging
+                const tools = ['tool_eraser', 'tool_highlight', 'tool_box'];
+                if (!tools.includes(State.activeTool)) return;
+                
+                // Prevent Default to stop text selection/native drag which can interfere
+                e.preventDefault();
+
                 if (e.target.closest('.interactive-item')) return;
 
                 const pg = State.pages[pIdx];
@@ -387,14 +432,28 @@
                 const startY = pg.viewport.height - ((e.clientY - rect.top) * (pg.viewport.height / rect.height));
                 
                 const id = Math.random().toString(36).substr(2, 9);
-                const itm = { id, pIdx, x: startX, y: startY, w: 0, h: 0, type: 'eraser', isDraft: true };
+                let type = 'eraser';
+                let extraProps = {};
+                
+                if (State.activeTool === 'tool_highlight') {
+                    type = 'highlight';
+                    extraProps = { color: State.highlightSettings.color };
+                } else if (State.activeTool === 'tool_box') {
+                    type = 'box';
+                    extraProps = { color: State.boxSettings.color, thickness: State.boxSettings.thickness };
+                }
+
+                const itm = { id, pIdx, x: startX, y: startY, w: 0, h: 0, type: type, isDraft: true, ...extraProps };
                 State.drafts.push(itm);
                 
                 const mm = (me) => {
                     const currentX = (me.clientX - rect.left) * (pg.viewport.width / rect.width);
                     const currentY = pg.viewport.height - ((me.clientY - rect.top) * (pg.viewport.height / rect.height));
                     
-                    const actualY = Math.max(startY, currentY); 
+                    // FIX: Use Math.min to set the anchor to the bottom-left Cartesian coordinate
+                    // Since renderItems applies translateY(-100%), the element renders upwards from itm.y
+                    // This ensures the box is drawn in the area dragged by the mouse, not above it.
+                    const actualY = Math.min(startY, currentY); 
                     const h = Math.abs(startY - currentY);
                     const w = Math.abs(startX - currentX);
                     
@@ -436,7 +495,8 @@
 
             onCanvasClick: (e, pIdx) => {
                 if (e.target.closest('.interactive-item')) return;
-                if (State.activeTool === 'tool_eraser') return; 
+                // Exclude dragging tools from click-to-create
+                if (['tool_eraser', 'tool_highlight', 'tool_box'].includes(State.activeTool)) return; 
 
                 State.selectedItemId = null; UI.renderItems();
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -602,13 +662,18 @@
                 if (!State.file) { alert("No PDF file loaded."); return; }
                 const total = Logic.getTotalItemCount();
                 if (total === 0) { alert("Nothing to export."); return; }
-                UI.showLoader("Generating PDF...");
+                UI.showLoader("Downloading Font & Generating PDF...");
                 
                 try {
-                    const { PDFDocument, rgb, StandardFonts } = PDFLib;
+                    const { PDFDocument, rgb } = PDFLib;
                     const pdfDoc = await PDFDocument.load(await State.file.arrayBuffer());
-                    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+                    
+                    // Register fontkit
+                    pdfDoc.registerFontkit(window.fontkit);
+
+                    // Fetch Korean Font
+                    const fontBytes = await fetch('https://cdn.jsdelivr.net/gh/beomjungil/Noto-Sans-KR/NotoSans-Regular.ttf').then(res => res.arrayBuffer());
+                    const customFont = await pdfDoc.embedFont(fontBytes);
                     
                     // 1. Always include Drafts (Manual)
                     let allItems = [...State.drafts];
@@ -665,17 +730,15 @@
                                     const lines = (itm.content || "").split('\n');
                                     let maxW = 0;
                                     lines.forEach(l => {
-                                        const w = font.widthOfTextAtSize(l, itm.size);
+                                        const w = customFont.widthOfTextAtSize(l, itm.size);
                                         if (w > maxW) maxW = w;
                                     });
                                     bgW = maxW;
                                     bgH = lines.length * itm.size;
-                                    // Text Y in PDF is baseline, but rect is bottom-left.
-                                    // Our safeY represents the bottom-left of the element.
                                     pg.drawRectangle({
                                         x: safeX,
                                         y: safeY,
-                                        width: bgW + 2, // Slight padding
+                                        width: bgW + 2,
                                         height: bgH + 2,
                                         color: rgb(1, 1, 1)
                                     });
@@ -700,17 +763,21 @@
                                     x: safeX, 
                                     y: textY, 
                                     size: itm.size, 
-                                    font, 
+                                    font: customFont, // USE CUSTOM FONT
                                     lineHeight: lineHeight, 
                                     color: hexToRgb(itm.color) 
                                 });
                             } else if (itm.type === 'marker') {
                                 const c = hexToRgb(itm.color);
-                                const tw = fontBold.widthOfTextAtSize(itm.content || "", itm.size);
+                                const tw = customFont.widthOfTextAtSize(itm.content || "", itm.size); // USE CUSTOM FONT
                                 pg.drawRectangle({ x: safeX, y: safeY, width: tw + 8, height: itm.size + 4, color: c });
-                                pg.drawText(itm.content || "", { x: safeX + 4, y: safeY + 2, size: itm.size, font: fontBold, color: rgb(1,1,1) });
+                                pg.drawText(itm.content || "", { x: safeX + 4, y: safeY + 2, size: itm.size, font: customFont, color: rgb(1,1,1) }); // USE CUSTOM FONT
                             } else if (itm.type === 'eraser') {
                                 pg.drawRectangle({ x: safeX, y: safeY, width: itm.w, height: itm.h, color: rgb(1,1,1) });
+                            } else if (itm.type === 'highlight') {
+                                pg.drawRectangle({ x: safeX, y: safeY, width: itm.w, height: itm.h, color: hexToRgb(itm.color), opacity: 0.4 });
+                            } else if (itm.type === 'box') {
+                                pg.drawRectangle({ x: safeX, y: safeY, width: itm.w, height: itm.h, borderColor: hexToRgb(itm.color), borderWidth: itm.thickness || 2, color: undefined, opacity: 1 });
                             } else if (itm.type === 'image' && itm.content) {
                                 const parts = itm.content.split(',');
                                 const rawBase64 = parts.length > 1 ? parts[1] : parts[0];
@@ -754,42 +821,56 @@
             },
 
             updateToolbarState: () => {
-                const textBtn = document.getElementById('btn-tool-text');
-                const checkBtn = document.getElementById('btn-tool-check');
-                const crossBtn = document.getElementById('btn-tool-cross');
-                const eraserBtn = document.getElementById('btn-tool-eraser');
-                
+                const buttons = {
+                    'text': document.getElementById('btn-tool-text'),
+                    'check': document.getElementById('btn-tool-check'),
+                    'cross': document.getElementById('btn-tool-cross'),
+                    'highlight': document.getElementById('btn-tool-highlight'),
+                    'box': document.getElementById('btn-tool-box'),
+                    'eraser': document.getElementById('btn-tool-eraser')
+                };
+
                 const baseClass = "flex items-center justify-center gap-2 py-2 px-1 rounded-lg border font-bold text-xs transition-colors";
                 const inactiveClass = "bg-white hover:bg-slate-50 text-slate-700";
                 const activeClass = "bg-blue-600 text-white border-blue-600";
                 
-                textBtn.className = `${baseClass} ${State.activeTool === 'tool_text' ? activeClass : inactiveClass}`;
-                textBtn.querySelector('i').className = `fas fa-font ${State.activeTool === 'tool_text' ? 'text-white' : 'text-purple-600'}`;
-                
-                checkBtn.className = `${baseClass} ${State.activeTool === 'tool_check' ? activeClass : inactiveClass}`;
-                checkBtn.querySelector('i').className = `fas fa-check ${State.activeTool === 'tool_check' ? 'text-white' : 'text-green-600'}`;
-                
-                crossBtn.className = `${baseClass} ${State.activeTool === 'tool_cross' ? activeClass : inactiveClass}`;
-                crossBtn.querySelector('i').className = `fas fa-times ${State.activeTool === 'tool_cross' ? 'text-white' : 'text-red-600'}`;
-
-                eraserBtn.className = `${baseClass} ${State.activeTool === 'tool_eraser' ? activeClass : inactiveClass}`;
-                eraserBtn.querySelector('i').className = `fas fa-eraser ${State.activeTool === 'tool_eraser' ? 'text-white' : 'text-slate-500'}`;
+                Object.keys(buttons).forEach(key => {
+                    const btn = buttons[key];
+                    const isActive = State.activeTool === `tool_${key}`;
+                    btn.className = `${baseClass} ${isActive ? activeClass : inactiveClass}`;
+                    
+                    // Reset icon colors when inactive
+                    const icon = btn.querySelector('i');
+                    if(isActive) {
+                         icon.className = icon.className.replace(/text-[a-z]+-\d+/, 'text-white');
+                    } else {
+                         if(key === 'text') icon.className = "fas fa-font text-purple-600";
+                         if(key === 'check') icon.className = "fas fa-check text-green-600";
+                         if(key === 'cross') icon.className = "fas fa-times text-red-600";
+                         if(key === 'highlight') icon.className = "fas fa-highlighter text-yellow-500";
+                         if(key === 'box') icon.className = "far fa-square text-blue-500";
+                         if(key === 'eraser') icon.className = "fas fa-eraser text-slate-500";
+                    }
+                });
 
                 // Show/Hide Settings
                 const ts = document.getElementById('tool-text-settings');
                 const tcs = document.getElementById('tool-common-settings');
+                const hs = document.getElementById('tool-highlight-settings');
+                const bs = document.getElementById('tool-box-settings');
                 const es = document.getElementById('tool-eraser-settings');
 
-                if (State.activeTool === 'tool_text') { ts.classList.remove('hidden'); } else { ts.classList.add('hidden'); }
-                
-                // Show Common Settings (Opacity) for Text, Check, Cross
-                if (['tool_text', 'tool_check', 'tool_cross'].includes(State.activeTool)) {
-                    tcs.classList.remove('hidden');
-                } else {
-                    tcs.classList.add('hidden');
-                }
+                ts.classList.add('hidden');
+                tcs.classList.add('hidden');
+                hs.classList.add('hidden');
+                bs.classList.add('hidden');
+                es.classList.add('hidden');
 
-                if (State.activeTool === 'tool_eraser') { es.classList.remove('hidden'); } else { es.classList.add('hidden'); }
+                if (State.activeTool === 'tool_text') ts.classList.remove('hidden');
+                if (['tool_text', 'tool_check', 'tool_cross'].includes(State.activeTool)) tcs.classList.remove('hidden');
+                if (State.activeTool === 'tool_highlight') hs.classList.remove('hidden');
+                if (State.activeTool === 'tool_box') bs.classList.remove('hidden');
+                if (State.activeTool === 'tool_eraser') es.classList.remove('hidden');
             },
 
             renderSidebar: () => {
@@ -937,6 +1018,8 @@
                         }
 
                         if (itm.type === 'eraser') styleClass += ' item-eraser';
+                        if (itm.type === 'highlight') styleClass += ' item-highlight';
+                        if (itm.type === 'box') styleClass += ' item-box';
 
                         el.className = `interactive-item group ${isS ? 'selected' : ''} ${styleClass}`;
                         el.style.left = `${itm.x * (p.width / p.viewport.width)}px`;
@@ -946,12 +1029,18 @@
                         // Opaque background application
                         if (itm.isOpaque) {
                              el.style.backgroundColor = 'white';
-                             // Add a bit of padding if text so the background covers properly
-                             if(itm.type === 'text') {
-                                 // We don't add padding to el because it shifts position, but visually we might need it? 
-                                 // The current text rendering sets padding:0. 
-                                 // The background will tightly fit the box.
-                             }
+                        }
+                        
+                        // Specific styling for highlight & box
+                        if (itm.type === 'highlight') {
+                             el.style.backgroundColor = itm.color;
+                             el.style.opacity = '0.4';
+                             el.style.width = `${itm.w * (p.width / p.viewport.width)}px`;
+                             el.style.height = `${itm.h * (p.height / p.viewport.height)}px`;
+                        } else if (itm.type === 'box') {
+                             el.style.border = `${itm.thickness || 2}px solid ${itm.color}`;
+                             el.style.width = `${itm.w * (p.width / p.viewport.width)}px`;
+                             el.style.height = `${itm.h * (p.height / p.viewport.height)}px`;
                         }
 
                         if(itm.type === 'text' || itm.type === 'marker') {
@@ -1082,8 +1171,8 @@
                     const dx = (me.clientX - sX) * (pg.viewport.width / pg.width);
                     const dy = (me.clientY - sY) * (pg.viewport.height / pg.height); 
                     
-                    if (itm.type === 'image' || itm.type === 'eraser') { 
-                        if (itm.type === 'eraser') {
+                    if (itm.type === 'image' || itm.type === 'eraser' || itm.type === 'highlight' || itm.type === 'box') { 
+                        if (itm.type === 'eraser' || itm.type === 'highlight' || itm.type === 'box') {
                             itm.w = Math.max(10, oW + dx);
                             itm.h = Math.max(10, oH - dy);
                         } else {
